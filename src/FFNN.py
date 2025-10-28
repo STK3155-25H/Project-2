@@ -8,7 +8,7 @@ from copy import deepcopy, copy
 from typing import Tuple, Callable
 from sklearn.utils import resample
 from scheduler import Scheduler
-from activation_functions import sigmoid
+from activation_functions import sigmoid, derivate
 from cost_functions import CostOLS
 warnings.simplefilter("error")
 
@@ -245,7 +245,8 @@ class FFNN:
             return np.where(predict > threshold, 1, 0)
         else:
             return predict
-
+        # return predict
+        
     def reset_weights(self):
         """
         Description:
@@ -462,4 +463,5 @@ class FFNN:
             return str(round(value))
         return f"{value:.{decimals-n-1}f}"
     
-    
+    def predict_proba(self, X: np.ndarray):
+        return self._feedforward(X)

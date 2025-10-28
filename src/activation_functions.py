@@ -42,6 +42,12 @@ def derivate(func):
             return np.where(X > 0, 1, delta)
 
         return func
+    
+    if func.__name__ == "sigmoid":
+        def dfunc(X):
+            s = func(X)
+            return s * (1 - s)
+        return dfunc
 
     else:
         return elementwise_grad(func)
