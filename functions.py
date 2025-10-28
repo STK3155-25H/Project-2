@@ -76,4 +76,8 @@ class cost_function:
 def _mse( prediction, target):
     return np.mean((prediction - target)**2)
 
+def _cross_entropy(prediction, target, eps=1e-12):
+    prediction = np.clip(prediction, eps, 1.0)
+    return -np.sum(target * np.log(prediction))
+
 mse = cost_function(_mse)

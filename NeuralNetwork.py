@@ -17,9 +17,9 @@ class Layer:
         self.id: int = id
         self.weights: np.ndarray = weights
         self.bias: np.ndarray = bias
+        self.name:str = name
         self.last_activation: np.ndarray = None
         self.last_pre_activation: np.ndarray = None
-        self.name:str = name
         self.last_weights_gradient: np.ndarray = None
         self.last_bias_gradient: np.ndarray = None
 
@@ -105,6 +105,7 @@ class NeuralNetwork:
         d_act_hidden = self.hidden_activation.diff
         d_act_out = self.output_activation.diff
         
+        #TO DO: generalizzare a caso generico di derivata di cost function
         dC_da_L = 2 * (self.layers[-1].last_activation - targets) / m
         delta = dC_da_L * d_act_out(self.layers[-1].last_pre_activation) 
         

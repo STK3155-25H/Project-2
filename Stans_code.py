@@ -2,7 +2,8 @@
 # FUNCTIONS
 # ======================================================================================
 import math
-import autograd.numpy as np
+# import autograd.numpy as np
+import numpy as np
 import sys
 import warnings
 from autograd import grad, elementwise_grad
@@ -565,9 +566,14 @@ def Linear_derivative(x):
 
 # Function to determine the derivatives
 # --------------------------------------------------------------------------------------
-def derivate(f):
+def derivate(f, x = None ,autograd = True):
     """Return the derivative function for a given activation function."""
-    if f == Sigmoid:
+    if autograd == True and x is None:
+        return elementwise_grad(f)
+    if autograd == True and x is not None:
+        f =  elementwise_grad(f)
+        return f(x)
+    elif f == Sigmoid:
         return Sigmoid_derivative
     elif f == ReLU:
         return ReLU_derivative
@@ -600,7 +606,7 @@ class Scheduler:
         """
         self.eta = eta
 
-    def update_change(self, gradient):
+    def update_change(self, gradient: np.ndarray ):
         """
         Compute the change to apply to the parameters based on the gradient.
 
