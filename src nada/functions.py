@@ -1,8 +1,8 @@
 
 import scipy as scp
 from typing import List, Dict, Tuple, Callable, Any
-# import autograd.numpy as np
-import numpy as np
+import autograd.numpy as np
+# import numpy as np
 weights_n_biases = Tuple[np.ndarray, np.ndarray]
 layer = Dict[str,weights_n_biases]
 
@@ -19,6 +19,7 @@ class activation_function:
     def __init__(self, expr: Callable[[np.ndarray|np.number], np.ndarray|np.number], der = None):
         self.func = expr
         self.der = der
+        self.__name__ = expr.__name__
     def __call__(self, value: np.ndarray|np.number = None):
         if value is None:
             return self.func
@@ -75,18 +76,22 @@ class cost_function:
     def __init__(self, expr, der = None):
         self.func = expr
         self.der = der
+        self.__name__ = expr.__name__
     def __call__(self, prediction:np.ndarray|np.number = None  ,target: np.ndarray|np.number = None):
         if target is None or prediction is None:
             return self.func
         else : 
             return self.func(prediction, target)
         
-    def grad(self, value: np.ndarray|np.number = None, hard_coded_version = False):
-        if hard_coded_version is True and self.der is not None:
-            diff = self.der
-        else: 
-            diff = grad(self.func, 0) 
-        if value is None:
+    def grad(self, value: np.ndarray|np.number = None, target = None, hard_coded_version = False):
+        if hard_coded_version:
+            if self.der is not None:
+                diff = self.der
+            else:
+                raise ValueError("Hard-coded derivative requested but 'der' is None")
+        else:
+            diff = grad(self.func, argnum=0)
+        if value is None or target is None:
             return diff
         else: return diff(value)
         
