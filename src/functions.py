@@ -59,16 +59,20 @@ softmax = activation_function(_softmax)
 softmax_vec = activation_function(_softmax_vec)
 
 class cost_function:
-    def __init__(self, expr: Callable[[np.ndarray|np.number , np.ndarray|np.number], np.ndarray|np.number]):
+    def __init__(self, expr: Callable[[np.ndarray|np.number , np.ndarray|np.number], np.ndarray|np.number], der = None):
         self.func = expr
+        self.der = der
     def __call__(self, prediction:np.ndarray|np.number = None  ,target: np.ndarray|np.number = None):
         if target is None or prediction is None:
             return self.func
         else : 
             return self.func(prediction, target)
         
-    def grad(self, value: np.ndarray|np.number = None):
-        diff = grad(self.func, 0) 
+    def grad(self, value: np.ndarray|np.number = None, hard_coded_version = False):
+        if hard_coded_version is True and self.der is not None:
+            diff = self.der
+        else: 
+            diff = grad(self.func, 0) 
         if value is None:
             return diff
         else: return diff(value)
