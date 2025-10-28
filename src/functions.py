@@ -18,6 +18,7 @@ from sklearn.metrics import accuracy_score
 class activation_function:
     def __init__(self, expr: Callable[[np.ndarray|np.number], np.ndarray|np.number]):
         self.func = expr
+        self.der = der
     def __call__(self, value: np.ndarray|np.number = None):
         if value is None:
             return self.func
@@ -34,10 +35,21 @@ class activation_function:
 def _ReLU(z):
     return np.where(z > 0, z, 0)
 
+def _ReLU_der(z):
+    return np.where(z > 0, 1, 0)  
+
+def _leaky_ReLU(z, alpha=0.01):
+    return np.where(z > 0, z, alpha * z)            
+
+def _leaky_ReLU_der(z,  alpha=0.01):        
+    return np.where(z > 0, 1, alpha)
 
 def _sigmoid(z):
     return 1 / (1 + np.exp(-z))
 
+def _sigmoid_der(z):
+    s = _sigmoid(z)
+    return s * (1 - s)  
 
 def _softmax(z):
     """Compute softmax values for each set of scores in the rows of the matrix z.
@@ -53,8 +65,9 @@ def _softmax_vec(z):
     return e_z / np.sum(e_z)
 
 
-ReLU = activation_function(_ReLU)
-sigmoid = activation_function(_sigmoid)
+ReLU = activation_function(_ReLU, der=_ReLU_der)
+leaky_ReLU = activation_function(_leaky_ReLU, der=_leaky_ReLU_der)
+sigmoid = activation_function(_sigmoid, der=_sigmoid_der)
 softmax = activation_function(_softmax)
 softmax_vec = activation_function(_softmax_vec)
 
@@ -77,11 +90,59 @@ class cost_function:
             return diff
         else: return diff(value)
         
-def _mse( prediction, target):
-    return np.mean((prediction - target)**2)
+#def _mse( prediction, target):
+#    return np.mean((prediction - target)**2)
+
+#def _mse_der( prediction, target):
+#    return 2 * (prediction - target) / target.size
+
+# MSE loss with optional L1 and L2 regularization
+def _mse(prediction, target, weights=None, l1=0.0, l2=0.0):
+
+    mse_loss = np.mean((prediction - target) ** 2)
+    reg_term = 0.0
+    if weights is not None:
+        reg_term = l1 * np.sum(np.abs(weights)) + l2 * np.sum(weights ** 2)
+    return mse_loss + reg_term
+
+def _mse_der(prediction, target, weights=None, l1=0.0, l2=0.0):
+
+    grad_pred = 2 * (prediction - target) / target.size
+
+    grad_weights = None
+    if weights is not None:
+        grad_weights = l1 * np.sign(weights) + 2 * l2 * weights
+
+    return grad_pred, grad_weights
+
+def _binary_cross_entropy(prediction, target, weights=None, l1=0.0, l2=0.0, eps=1e-12):
+
+    prediction = np.clip(prediction, eps, 1.0 - eps)
+    loss = -np.mean(target * np.log(prediction) + (1 - target) * np.log(1 - prediction))
+
+    if weights is not None:
+        reg_term = l1 * np.sum(np.abs(weights)) + l2 * np.sum(weights ** 2)
+        loss += reg_term    
+
+    return loss
+
+def _binary_cross_entropy_der(prediction, target, eps=1e-12):
+    prediction = np.clip(prediction, eps, 1.0 - eps)
+    grad_pred = - (target / prediction - (1 - target) / (1 - prediction)) / target.shape[0]
+
+    grad_weights = None
+    if weights is not None:
+        grad_weights = l1 * np.sign(weights) + 2 * l2 * weights
+    
+    return grad_pred, grad_weights
 
 def _cross_entropy(prediction, target, eps=1e-12):
     prediction = np.clip(prediction, eps, 1.0)
     return -np.sum(target * np.log(prediction))
 
-mse = cost_function(_mse)
+def _cross_entropy_der(prediction, target, eps=1e-12):
+    return - (target / prediction) / target.shape[0]
+
+mse = cost_function(_mse, der=_mse_der)
+binary_cross_entropy = cost_function(_binary_cross_entropy, der=_binary_cross_entropy_der)
+cross_entropy = cost_function(_cross_entropy, der=_cross_entropy_der)
