@@ -1,12 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.utils import resample
 import time
 import os
-from numba import njit
 from main import SEED
 from typing import Callable 
 from functions import cost_function

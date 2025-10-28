@@ -1,8 +1,8 @@
-import sympy as sy
+
 import scipy as scp
 from typing import List, Dict, Tuple, Callable, Any
-import autograd.numpy as np
-import numpy as npy
+# import autograd.numpy as np
+import numpy as np
 weights_n_biases = Tuple[np.ndarray, np.ndarray]
 layer = Dict[str,weights_n_biases]
 
@@ -16,7 +16,7 @@ from sklearn.metrics import accuracy_score
 
 
 class activation_function:
-    def __init__(self, expr: Callable[[np.ndarray|np.number], np.ndarray|np.number]):
+    def __init__(self, expr: Callable[[np.ndarray|np.number], np.ndarray|np.number], der = None):
         self.func = expr
         self.der = der
     def __call__(self, value: np.ndarray|np.number = None):
@@ -72,7 +72,7 @@ softmax = activation_function(_softmax)
 softmax_vec = activation_function(_softmax_vec)
 
 class cost_function:
-    def __init__(self, expr: Callable[[np.ndarray|np.number , np.ndarray|np.number], np.ndarray|np.number], der = None):
+    def __init__(self, expr, der = None):
         self.func = expr
         self.der = der
     def __call__(self, prediction:np.ndarray|np.number = None  ,target: np.ndarray|np.number = None):
@@ -126,7 +126,7 @@ def _binary_cross_entropy(prediction, target, weights=None, l1=0.0, l2=0.0, eps=
 
     return loss
 
-def _binary_cross_entropy_der(prediction, target, eps=1e-12):
+def _binary_cross_entropy_der(prediction, target, eps=1e-12, weights=None, l1=0.0, l2=0.0):
     prediction = np.clip(prediction, eps, 1.0 - eps)
     grad_pred = - (target / prediction - (1 - target) / (1 - prediction)) / target.shape[0]
 
