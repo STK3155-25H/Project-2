@@ -17,6 +17,9 @@ def softmax(X):
     delta = 10e-10
     return np.exp(X) / (np.sum(np.exp(X), axis=-1, keepdims=True) + delta)
 
+def tanh(X):
+    return np.tanh(X)
+
 
 def RELU(X):
     return np.where(X > np.zeros(X.shape), X, np.zeros(X.shape))
@@ -48,6 +51,12 @@ def derivate(func):
             s = func(X)
             return s * (1 - s)
         return dfunc
+
+    # if func.__name__ == "tanh":
+    #     def dfunc(X):
+    #         s = func(X)
+    #         return s * (1 - s)
+    #     return dfunc
 
     else:
         return elementwise_grad(func)
