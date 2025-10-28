@@ -27,7 +27,7 @@ X_train, X_test, y_train, y_test = train_test_split(
     X, y, test_size=0.2, random_state=SEED
 )
 
-layout = [2, 10, 1]
+layout = [2, 20,20, 1]
 epochs = 200
 lr = 0.01
 lam = 0.0
@@ -50,6 +50,6 @@ grid = np.c_[xx.ravel(), yy.ravel()]
 zz = net.predict(grid)
 zz = (zz > 0.5).astype(int)
 plt.contourf(xx, yy, zz.reshape(xx.shape), alpha=0.3, cmap="coolwarm")
-plt.scatter(X_train[:, 0], X_train[:, 1], c=y_train.flatten(), cmap="coolwarm", edgecolor="k")
+plt.scatter(X_test[:, 0], X_test[:, 1], c=y_test.flatten(), cmap="coolwarm", edgecolor="k")
 plt.title("NeuralNetwork decision boundary on make_moons")
 plt.show()

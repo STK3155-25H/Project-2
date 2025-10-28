@@ -1,0 +1,62 @@
+import numpy as np
+import os
+SEED = os.environ.get("SEED")
+
+if SEED is not None:
+    SEED = int(SEED) 
+    print("SEED from env:", SEED)
+else:
+    SEED = 314
+    print("SEED from hard-coded value in file ml_core.py :", SEED)
+    print("If you want a specific SEED set the SEED environment variable")
+np.random.seed(SEED)
+
+import matplotlib.pyplot as plt
+from FFNN import FFNN
+from scheduler import Adam
+from cost_functions import CostOLS
+from activation_functions import sigmoid, identity
+
+# ---- RUNGE FUNCTION DATA ---- #
+def runge(x):
+    return 1 / (1 + 25 * x**2)
+
+# Dataset in [-1, 1]
+X = np.linspace(-1, 1, 200)
+y = runge(X)
+
+# Shape in input column vector shape: (n_samples, n_features)
+X = X.reshape(-1, 1)
+y = y.reshape(-1, 1)
+
+# ---- Model Settings ---- #
+layout = [1, 20, 20, 1]  # More hidden units for better approximation
+epochs = 2000
+lr = 0.001
+lam = 0.0
+rho = 0.9
+rho2 = 0.999
+
+net = FFNN(
+    dimensions=layout,
+    hidden_func=sigmoid,
+    output_func=identity,  # Linear output
+    cost_func= CostOLS,
+    seed=SEED,
+)
+
+scheduler = Adam(lr, rho, rho2)
+
+# ---- TRAIN ---- #
+net.fit(X=X, t=y, scheduler=scheduler, batches=1, epochs=epochs, lam=lam)
+
+# ---- PLOT RESULTS ---- #
+y_pred = net.predict(X)
+
+plt.figure(figsize=(8,5))
+plt.plot(X, y, label="Runge Function", linewidth=2)
+plt.scatter(X, y_pred, s=10, label="NN Approximation")
+plt.legend()
+plt.title("Runge Function Fit with FFNN")
+plt.grid(True)
+plt.show()
