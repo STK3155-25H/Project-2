@@ -39,7 +39,8 @@ rho = 0.9
 rho2 = 0.999
 batches = 100
 
-activation_funcs = [sigmoid, LRELU, RELU, tanh, softmax]
+# activation_funcs = [sigmoid, LRELU, RELU, tanh, softmax]
+activation_funcs = [LRELU, RELU, tanh]
 
 n_hidden_list = list(range(0, 6))
 n_perceptrons_list = [2*i for i in range(1, 21)]
@@ -74,6 +75,10 @@ def extract_val_loss(history: dict):
     except Exception:
         return np.nan
 
+# Create folders if they don't exist
+os.makedirs("Models", exist_ok=True)
+os.makedirs("output", exist_ok=True)
+
 for act in activation_funcs:
     heat = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
 
@@ -85,7 +90,7 @@ for act in activation_funcs:
             net = FFNN(
                 dimensions=layout,
                 hidden_func=act,
-                output_func=identity,   # regressione
+                output_func=identity,
                 cost_func=CostOLS,
                 seed=SEED,
             )
@@ -114,6 +119,11 @@ for act in activation_funcs:
 
             heat[i_h, j_w] = val_loss
 
+            # Save the model
+            layout_str = '_'.join(map(str, layout))
+            model_filename = f"model_layout_{layout_str}_act_{act.__name__}.npz"
+            net.save_weights(os.path.join("Models", model_filename))
+
     plt.figure(figsize=(10, 5))
     im = plt.imshow(
         heat,
@@ -135,4 +145,6 @@ for act in activation_funcs:
     #         plt.text(j, i, f"{v:.2e}", ha="center", va="center", fontsize=7)
 
     plt.tight_layout()
+    plot_filename = f"val_loss_heatmap_{act.__name__}.png"
+    plt.savefig(os.path.join("output", plot_filename))
     plt.show()

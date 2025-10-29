@@ -42,6 +42,7 @@ class FFNN:
         output_func: Callable = lambda x: x,
         cost_func: Callable = CostOLS,
         seed: int = None,
+        initial_weights: list[np.ndarray] = None,
     ):
         self.dimensions = dimensions
         self.hidden_func = hidden_func
@@ -55,8 +56,20 @@ class FFNN:
         self.z_matrices = list()
         self.classification = None
 
-        self.reset_weights()
+        if initial_weights is not None:
+            self._set_weights(initial_weights)
+        else:
+            self.reset_weights()
         self._set_classification()
+
+    def _set_weights(self, weights: list[np.ndarray]):
+        if len(weights) != len(self.dimensions) - 1:
+            raise ValueError("Number of weight matrices does not match the network architecture.")
+        for i, w in enumerate(weights):
+            expected_shape = (self.dimensions[i] + 1, self.dimensions[i + 1])
+            if w.shape != expected_shape:
+                raise ValueError(f"Shape mismatch for weight matrix at layer {i}: expected {expected_shape}, got {w.shape}")
+        self.weights = weights
 
     def fit(
         self,
@@ -68,6 +81,7 @@ class FFNN:
         lam: float = 0,
         X_val: np.ndarray = None,
         t_val: np.ndarray = None,
+        save_on_interrupt: str = None,
     ):
         """
         Description:
@@ -89,6 +103,7 @@ class FFNN:
             VII  lam (float) : regularization hyperparameter lambda
             VIII X_val (np.ndarray) : validation set
             IX   t_val (np.ndarray) : validation target set
+            X    save_on_interrupt (str) : Path to save weights if training is interrupted (e.g., via KeyboardInterrupt)
 
         Returns:
         ------------
@@ -186,7 +201,9 @@ class FFNN:
                 )
         except KeyboardInterrupt:
             # allows for stopping training at any point and seeing the result
-            pass
+            if save_on_interrupt:
+                print("\nTraining interrupted. Saving current weights...")
+                self.save_weights(save_on_interrupt)
 
         # visualization of training progression (similiar to tensorflow progression bar)
         sys.stdout.write("\r" + " " * print_length)
@@ -465,3 +482,32 @@ class FFNN:
     
     def predict_proba(self, X: np.ndarray):
         return self._feedforward(X)
+
+    def save_weights(self, filename: str):
+        """
+        Description:
+        ------------
+            Saves the current weights (including biases) to a .npz file.
+
+        Parameters:
+        ------------
+            I   filename (str): The path to save the weights file.
+        """
+        weight_dict = {f'w{i}': self.weights[i] for i in range(len(self.weights))}
+        np.savez(filename, **weight_dict)
+
+    def load_weights(self, filename: str):
+        """
+        Description:
+        ------------
+            Loads weights (including biases) from a .npz file and sets them in the model.
+            The architecture (dimensions) must match the saved weights.
+
+        Parameters:
+        ------------
+            I   filename (str): The path to the weights file to load.
+        """
+        data = np.load(filename)
+        keys = sorted(data.keys())
+        loaded_weights = [data[k] for k in keys]
+        self._set_weights(loaded_weights)
