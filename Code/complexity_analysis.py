@@ -1,6 +1,7 @@
 import numpy as np
 import os
 import pandas as pd
+from datetime import datetime
 SEED = os.environ.get("SEED")
 
 if SEED is not None:
@@ -77,18 +78,58 @@ def extract_val_loss(history: dict):
     except Exception:
         return np.nan
 
-# Create folders if they don't exist
+# Create base folders if they don't exist
 os.makedirs("Models", exist_ok=True)
 os.makedirs("output", exist_ok=True)
 
+# Find previous runs
+previous_runs = [d for d in os.listdir("Models") if d.startswith("run_")]
+
+if previous_runs:
+    print("Previous runs found:")
+    for i, r in enumerate(sorted(previous_runs)):
+        print(f"{i+1}: {r}")
+    choice = input("Do you want to continue a previous run? (y/n): ").lower()
+    if choice == 'y':
+        run_num = int(input("Enter the number of the run to continue: "))
+        run_dir = sorted(previous_runs)[run_num - 1]
+        print(f"Continuing run: {run_dir}")
+    else:
+        current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+        run_dir = f"run_{current_time}"
+        os.makedirs(os.path.join("Models", run_dir), exist_ok=True)
+        os.makedirs(os.path.join("output", run_dir), exist_ok=True)
+        print(f"Starting new run: {run_dir}")
+else:
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = f"run_{current_time}"
+    os.makedirs(os.path.join("Models", run_dir), exist_ok=True)
+    os.makedirs(os.path.join("output", run_dir), exist_ok=True)
+    print(f"Starting new run: {run_dir}")
+
 for act in activation_funcs:
-    heat = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
+    csv_filename = f"val_loss_data_{act.__name__}.csv"
+    csv_path = os.path.join("output", run_dir, csv_filename)
+    if os.path.exists(csv_path):
+        print(f"Skipping activation {act.__name__} as CSV already exists.")
+        continue
+
+    temp_heat_path = os.path.join("output", run_dir, f"temp_heat_{act.__name__}.csv")
+    if os.path.exists(temp_heat_path):
+        df_temp = pd.read_csv(temp_heat_path, index_col='hidden_layers')
+        heat = df_temp.values
+    else:
+        heat = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
 
     for i_h, n_hidden in enumerate(n_hidden_list):
         for j_w, width in enumerate(n_perceptrons_list):
-            layout = build_layout(n_hidden, width)
+            if not np.isnan(heat[i_h, j_w]):
+                continue  # Already computed
 
-            # Inizializza rete
+            layout = build_layout(n_hidden, width)
+            model_filename = f"model_hidden_{n_hidden}_width_{width}_act_{act.__name__}.npz"
+            model_path = os.path.join("Models", run_dir, model_filename)
+
             net = FFNN(
                 dimensions=layout,
                 hidden_func=act,
@@ -96,42 +137,43 @@ for act in activation_funcs:
                 cost_func=CostOLS,
                 seed=SEED,
             )
-            scheduler = Adam(lr, rho, rho2)
 
-            # Allena (con validation)
-            history = net.fit(
-                X=X_train, t=y_train,
-                scheduler=scheduler,
-                batches=batches,
-                epochs=epochs,
-                lam_l1=lam1,
-                lam_l2=lam2,
-                X_val=X_val, t_val=y_val,
-            )
-
-            val_loss = None
-            val_loss = history.get("val_loss", history.get("val_errors"))
-            if val_loss is not None and len(val_loss) > 0:
-                val_loss = float(np.min(val_loss) if VAL_LOSS_MODE == "min" else val_loss[-1])
+            if os.path.exists(model_path):
+                net.load_weights(model_path)
+                y_pred = net.predict(X_val)
+                val_loss = float(CostOLS(y_val)(y_pred))
             else:
-                try:
-                    y_pred = net.predict(X_val)
-                    val_loss = float(CostOLS(y_pred, y_val))
-                except Exception:
-                    val_loss = np.nan
+                scheduler = Adam(lr, rho, rho2)
+                history = net.fit(
+                    X=X_train, t=y_train,
+                    scheduler=scheduler,
+                    batches=batches,
+                    epochs=epochs,
+                    lam_l1=lam1,
+                    lam_l2=lam2,
+                    X_val=X_val, t_val=y_val,
+                    save_on_interrupt=model_path,
+                )
+                net.save_weights(model_path)
+                val_loss = extract_val_loss(history)
 
             heat[i_h, j_w] = val_loss
 
-            # Save the model with unique filename including n_hidden and width
-            model_filename = f"model_hidden_{n_hidden}_width_{width}_act_{act.__name__}.npz"
-            net.save_weights(os.path.join("Models", model_filename))
+            # Save temp heatmap after each computation
+            df_temp = pd.DataFrame(heat, index=n_hidden_list, columns=n_perceptrons_list)
+            df_temp.index.name = 'hidden_layers'
+            df_temp.columns.name = 'neurons_per_layer'
+            df_temp.to_csv(temp_heat_path)
 
-    # Save the heatmap data to CSV
+    # Save the final heatmap data to CSV
     df = pd.DataFrame(heat, index=n_hidden_list, columns=n_perceptrons_list)
     df.index.name = 'hidden_layers'
     df.columns.name = 'neurons_per_layer'
-    csv_filename = f"val_loss_data_{act.__name__}.csv"
-    df.to_csv(os.path.join("output", csv_filename))
+    df.to_csv(csv_path)
+
+    # Remove temp file if exists
+    if os.path.exists(temp_heat_path):
+        os.remove(temp_heat_path)
 
     plt.figure(figsize=(10, 5))
     im = plt.imshow(
@@ -148,12 +190,7 @@ for act in activation_funcs:
     plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list, rotation=45)
     plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
 
-    # Mostra i valori (opzionale: commenta se disturba)
-    # for (i, j), v in np.ndenumerate(heat):
-    #     if np.isfinite(v):
-    #         plt.text(j, i, f"{v:.2e}", ha="center", va="center", fontsize=7)
-
     plt.tight_layout()
     plot_filename = f"val_loss_heatmap_{act.__name__}.png"
-    plt.savefig(os.path.join("output", plot_filename))
+    plt.savefig(os.path.join("output", run_dir, plot_filename))
     plt.show()

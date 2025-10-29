@@ -18,8 +18,9 @@ from src.cost_functions import CostOLS
 from src.activation_functions import sigmoid, identity, LRELU
 
 # ---- RUNGE FUNCTION DATA ---- #
-def runge(x):
-    return 1 / (1 + 25 * x**2)
+def runge(x, noise_std=0.005):
+    noise = np.random.normal(0, noise_std, size=x.shape)
+    return 1 / (1 + 25 * x**2) + noise
 
 # Dataset in [-1, 1]
 X = np.linspace(-1, 1, 200)
@@ -31,7 +32,7 @@ y = y.reshape(-1, 1)
 
 # ---- Model Settings ---- #
 layout = [1, 20, 20, 1]  # More hidden units for better approximation
-epochs = 1000
+epochs = 1500
 lr = 0.001
 lam = 0.0
 rho = 0.9   
@@ -48,7 +49,7 @@ net = FFNN(
 scheduler = Adam(lr, rho, rho2)
 
 # ---- TRAIN ---- #
-scores = net.fit(X=X, t=y, scheduler=scheduler, batches=100, epochs=epochs, lam=lam)
+scores = net.fit(X=X, t=y, scheduler=scheduler, batches=100, epochs=epochs)
 
 # ---- PLOT RESULTS ---- #
 y_pred = net.predict(X)
