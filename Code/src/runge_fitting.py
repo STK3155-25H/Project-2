@@ -31,7 +31,7 @@ y = y.reshape(-1, 1)
 
 # ---- Model Settings ---- #
 layout = [1, 20, 20, 1]  # More hidden units for better approximation
-epochs = 2000
+epochs = 1000
 lr = 0.001
 lam = 0.0
 rho = 0.9   
@@ -40,7 +40,7 @@ rho2 = 0.999
 net = FFNN(
     dimensions=layout,
     hidden_func=LRELU,
-    output_func=identity,  # Linear output
+    output_func=identity,
     cost_func=CostOLS,
     seed=SEED,
 )

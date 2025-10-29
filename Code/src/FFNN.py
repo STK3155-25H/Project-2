@@ -7,9 +7,11 @@ from random import random, seed
 from copy import deepcopy, copy
 from typing import Tuple, Callable
 from sklearn.utils import resample
-from functions import cost_function,activation_function,mse, ReLU
+from src.scheduler import Scheduler
+from src.activation_functions import sigmoid, derivate
+from src.cost_functions import CostOLS
 warnings.simplefilter("error")
-from scheduler import Scheduler
+
 
 class FFNN:
     """
@@ -36,11 +38,10 @@ class FFNN:
     def __init__(
         self,
         dimensions: tuple[int],
-        hidden_func: activation_function = ReLU,
-        output_func: activation_function = lambda x: x,
-        cost_func: cost_function = mse,
+        hidden_func: Callable = sigmoid,
+        output_func: Callable = lambda x: x,
+        cost_func: Callable = CostOLS,
         seed: int = None,
-        hard_coded_ders: bool = False
     ):
         self.dimensions = dimensions
         self.hidden_func = hidden_func
@@ -53,7 +54,6 @@ class FFNN:
         self.a_matrices = list()
         self.z_matrices = list()
         self.classification = None
-        self.hard_coded_ders = hard_coded_ders
 
         self.reset_weights()
         self._set_classification()
@@ -124,9 +124,9 @@ class FFNN:
         X, t = resample(X, t)
 
         # this function returns a function valued only at X
-        cost_function_train = self.cost_func
+        cost_function_train = self.cost_func(t)
         if val_set:
-            cost_function_val = self.cost_func
+            cost_function_val = self.cost_func(t_val)
 
         # create schedulers for each weight matrix
         for i in range(len(self.weights)):
@@ -159,13 +159,13 @@ class FFNN:
 
                 # computing performance metrics
                 pred_train = self.predict(X)
-                train_error = cost_function_train(prediction=pred_train, target=t)
+                train_error = cost_function_train(pred_train)
 
                 train_errors[e] = train_error
                 if val_set:
                     
                     pred_val = self.predict(X_val)
-                    val_error = cost_function_val(pred_val, t_val)
+                    val_error = cost_function_val(pred_val)
                     val_errors[e] = val_error
 
                 if self.classification:
@@ -245,7 +245,8 @@ class FFNN:
             return np.where(predict > threshold, 1, 0)
         else:
             return predict
-
+        # return predict
+        
     def reset_weights(self):
         """
         Description:
@@ -347,8 +348,8 @@ class FFNN:
             No return value.
 
         """
-        out_derivative = self.output_func.diff
-        hidden_derivative = self.hidden_func.diff
+        out_derivative = derivate(self.output_func)
+        hidden_derivative = derivate(self.hidden_func)
 
         for i in range(len(self.weights) - 1, -1, -1):
             # delta terms for output
@@ -360,10 +361,10 @@ class FFNN:
                     delta_matrix = self.a_matrices[i + 1] - t
                 # for single class classification
                 else:
-                    cost_func_derivative = self.cost_func.grad()
+                    cost_func_derivative = grad(self.cost_func(t))
                     delta_matrix = out_derivative(
                         self.z_matrices[i + 1]
-                    ) * cost_func_derivative(self.a_matrices[i + 1],t)
+                    ) * cost_func_derivative(self.a_matrices[i + 1])
 
             # delta terms for hidden layer
             else:
@@ -461,3 +462,6 @@ class FFNN:
         if n >= decimals - 1:
             return str(round(value))
         return f"{value:.{decimals-n-1}f}"
+    
+    def predict_proba(self, X: np.ndarray):
+        return self._feedforward(X)
