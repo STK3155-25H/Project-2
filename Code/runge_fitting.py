@@ -12,10 +12,10 @@ else:
 np.random.seed(SEED)
 
 import matplotlib.pyplot as plt
-from FFNN import FFNN
-from scheduler import Adam
-from cost_functions import CostOLS
-from activation_functions import sigmoid, identity, LRELU
+from src.FFNN import FFNN
+from src.scheduler import Adam
+from src.cost_functions import CostOLS
+from src.activation_functions import sigmoid, identity, LRELU
 
 # ---- RUNGE FUNCTION DATA ---- #
 def runge(x):

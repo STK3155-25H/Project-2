@@ -1,5 +1,6 @@
 import numpy as np
 import os
+import pandas as pd
 SEED = os.environ.get("SEED")
 
 if SEED is not None:
@@ -32,7 +33,7 @@ X_train, X_val, y_train, y_val = train_test_split(
 )
 
 # ---- Training Settings ---- #
-epochs = 2000
+epochs = 1500
 lr = 0.001
 lam = 0.0
 rho = 0.9
@@ -42,7 +43,7 @@ batches = 100
 # activation_funcs = [sigmoid, LRELU, RELU, tanh, softmax]
 activation_funcs = [LRELU, RELU, tanh]
 
-n_hidden_list = list(range(0, 6))
+n_hidden_list = list(range(1, 6))
 n_perceptrons_list = [2*i for i in range(1, 21)]
 
 VAL_LOSS_MODE = "min"  # "final" for the loss of the last epoch
@@ -119,10 +120,16 @@ for act in activation_funcs:
 
             heat[i_h, j_w] = val_loss
 
-            # Save the model
-            layout_str = '_'.join(map(str, layout))
-            model_filename = f"model_layout_{layout_str}_act_{act.__name__}.npz"
+            # Save the model with unique filename including n_hidden and width
+            model_filename = f"model_hidden_{n_hidden}_width_{width}_act_{act.__name__}.npz"
             net.save_weights(os.path.join("Models", model_filename))
+
+    # Save the heatmap data to CSV
+    df = pd.DataFrame(heat, index=n_hidden_list, columns=n_perceptrons_list)
+    df.index.name = 'hidden_layers'
+    df.columns.name = 'neurons_per_layer'
+    csv_filename = f"val_loss_data_{act.__name__}.csv"
+    df.to_csv(os.path.join("output", csv_filename))
 
     plt.figure(figsize=(10, 5))
     im = plt.imshow(
