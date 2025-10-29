@@ -533,3 +533,6 @@ TSWLatexianTemp*
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+Code/Models/
+Code/output
