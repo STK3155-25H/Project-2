@@ -206,6 +206,7 @@ class FFNN:
             if save_on_interrupt:
                 print("\nTraining interrupted. Saving current weights...")
                 self.save_weights(save_on_interrupt)
+            raise  # Re-raise to propagate the interrupt and stop the outer loop
 
         # visualization of training progression (similiar to tensorflow progression bar)
         sys.stdout.write("\r" + " " * print_length)
