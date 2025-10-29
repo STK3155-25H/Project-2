@@ -3,7 +3,7 @@ import os
 SEED = os.environ.get("SEED")
 
 if SEED is not None:
-    SEED = int(SEED) 
+    SEED = int(SEED)
     print("SEED from env:", SEED)
 else:
     SEED = 314
@@ -12,61 +12,127 @@ else:
 np.random.seed(SEED)
 
 import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+
 from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
-from src.activation_functions import sigmoid, identity, LRELU,RELU,tanh,softmax
+from src.activation_functions import sigmoid, identity, LRELU, RELU, tanh, softmax
 
-# ---- RUNGE FUNCTION DATA ---- #
-def runge(x):
-    return 1 / (1 + 25 * x**2)
+def runge(x, noise_std=0.05):
+    noise = np.random.normal(0, noise_std, size=x.shape)
+    return 1 / (1 + 25 * x**2) + noise
 
-# Dataset in [-1, 1]
-X = np.linspace(-1, 1, 200)
-y = runge(X)
 
-# Shape in input column vector shape: (n_samples, n_features)
-X = X.reshape(-1, 1)
-y = y.reshape(-1, 1)
+X = np.linspace(-1, 1, 200).reshape(-1, 1)
+y = runge(X).reshape(-1, 1)
 
-# ---- Model Settings ---- #
-layout = [1, 20, 20, 1]  # More hidden units for better approximation
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y, test_size=0.2, random_state=SEED, shuffle=True
+)
+
+# ---- Training Settings ---- #
 epochs = 2000
 lr = 0.001
 lam = 0.0
-rho = 0.9   
+rho = 0.9
 rho2 = 0.999
+batches = 100
 
-scores = {}
-activation_func = [sigmoid, LRELU,RELU,tanh,softmax]
+activation_funcs = [sigmoid, LRELU, RELU, tanh, softmax]
 
-for act_func in activation_func:
-    net = FFNN(
-        dimensions=layout,
-        hidden_func=act_func,
-        output_func=identity,
-        cost_func=CostOLS,
-        seed=SEED,
+n_hidden_list = list(range(0, 6))
+n_perceptrons_list = [2*i for i in range(1, 21)]
+
+VAL_LOSS_MODE = "min"  # "final" for the loss of the last epoch
+
+def build_layout(n_hidden: int, width: int):
+    """
+    Crea un layout come [1, width, width, ..., 1]
+    Se n_hidden = 0 => [1, 1] (modello lineare)
+    """
+    if n_hidden <= 0:
+        return [1, 1]
+    return [1] + [width] * n_hidden + [1]
+
+def extract_val_loss(history: dict):
+    """
+    Estrae la validation loss dalla history restituita da FFNN.fit().
+    Prova diverse chiavi; se assente, calcola manualmente la MSE su X_val.
+    """
+    # convenzioni possibili nelle tue versioni precedenti
+    val = history.get("val_loss", history.get("val_errors"))
+    if val is not None and len(val) > 0:
+        if VAL_LOSS_MODE == "min":
+            return float(np.min(val))
+        else:
+            return float(val[-1])
+
+    try:
+        y_pred = net.predict(X_val) 
+        return float(CostOLS(y_pred, y_val))
+    except Exception:
+        return np.nan
+
+for act in activation_funcs:
+    heat = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
+
+    for i_h, n_hidden in enumerate(n_hidden_list):
+        for j_w, width in enumerate(n_perceptrons_list):
+            layout = build_layout(n_hidden, width)
+
+            # Inizializza rete
+            net = FFNN(
+                dimensions=layout,
+                hidden_func=act,
+                output_func=identity,   # regressione
+                cost_func=CostOLS,
+                seed=SEED,
+            )
+            scheduler = Adam(lr, rho, rho2)
+
+            # Allena (con validation)
+            history = net.fit(
+                X=X_train, t=y_train,
+                scheduler=scheduler,
+                batches=batches,
+                epochs=epochs,
+                lam=lam,
+                X_val=X_val, t_val=y_val,
+            )
+
+            val_loss = None
+            val_loss = history.get("val_loss", history.get("val_errors"))
+            if val_loss is not None and len(val_loss) > 0:
+                val_loss = float(np.min(val_loss) if VAL_LOSS_MODE == "min" else val_loss[-1])
+            else:
+                try:
+                    y_pred = net.predict(X_val)
+                    val_loss = float(CostOLS(y_pred, y_val))
+                except Exception:
+                    val_loss = np.nan
+
+            heat[i_h, j_w] = val_loss
+
+    plt.figure(figsize=(10, 5))
+    im = plt.imshow(
+        heat,
+        aspect="auto",
+        origin="upper",
+        interpolation="nearest"
     )
-    scheduler = Adam(lr, rho, rho2)
-    scores[act_func.__name__] = net.fit(X=X, t=y, scheduler=scheduler, batches=100, epochs=epochs, lam=lam)
-# ---- PLOT TRAIN / VAL LOSSES ---- #
-# plt.figure(figsize=(9,5))
+    plt.colorbar(im, label="Validation Loss (OLS)")
+    plt.title(f"Validation Loss Heatmap — activation: {act.__name__}")
+    plt.xlabel("Neurons per hidden layer")
+    plt.ylabel("Number of hidden layers")
 
-for name, history in scores.items():
-    # prova entrambe le convenzioni di chiave
-    train = history.get("train_loss", history.get("train_errors"))
-    val   = history.get("val_loss",   history.get("val_errors"))
+    plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list, rotation=45)
+    plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
 
-    if train is not None:
-        plt.plot(range(1, len(train)+1), train, linestyle="--", label=f"{name} train")
-    if val is not None:
-        plt.plot(range(1, len(val)+1), val, label=f"{name} val")
+    # Mostra i valori (opzionale: commenta se disturba)
+    # for (i, j), v in np.ndenumerate(heat):
+    #     if np.isfinite(v):
+    #         plt.text(j, i, f"{v:.2e}", ha="center", va="center", fontsize=7)
 
-plt.xlabel("Epoch")
-plt.ylabel("Loss")
-plt.title("Training curves per activation")
-plt.grid(True)
-plt.legend()
-plt.tight_layout()
-plt.show()
+    plt.tight_layout()
+    plt.show()
