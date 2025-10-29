@@ -78,7 +78,8 @@ class FFNN:
         scheduler: Scheduler,
         batches: int = 1,
         epochs: int = 100,
-        lam: float = 0,
+        lam_l1: float = 0,
+        lam_l2: float = 0,
         X_val: np.ndarray = None,
         t_val: np.ndarray = None,
         save_on_interrupt: str = None,
@@ -100,10 +101,11 @@ class FFNN:
         ------------
             V    batches (int) : number of batches the datasets are split into, default equal to 1
             VI   epochs (int) : number of iterations used to train the network, default equal to 100
-            VII  lam (float) : regularization hyperparameter lambda
-            VIII X_val (np.ndarray) : validation set
-            IX   t_val (np.ndarray) : validation target set
-            X    save_on_interrupt (str) : Path to save weights if training is interrupted (e.g., via KeyboardInterrupt)
+            VII  lam_l1 (float) : L1 regularization hyperparameter
+            VIII lam_l2 (float) : L2 regularization hyperparameter
+            IX   X_val (np.ndarray) : validation set
+            X    t_val (np.ndarray) : validation target set
+            XI   save_on_interrupt (str) : Path to save weights if training is interrupted (e.g., via KeyboardInterrupt)
 
         Returns:
         ------------
@@ -148,7 +150,7 @@ class FFNN:
             self.schedulers_weight.append(copy(scheduler))
             self.schedulers_bias.append(copy(scheduler))
 
-        print(f"{scheduler.__class__.__name__}: Eta={scheduler.eta}, Lambda={lam}")
+        print(f"{scheduler.__class__.__name__}: Eta={scheduler.eta}, Lambda L1={lam_l1}, Lambda L2={lam_l2}")
 
         try:
             for e in range(epochs):
@@ -163,7 +165,7 @@ class FFNN:
                         t_batch = t[i * batch_size : (i + 1) * batch_size, :]
 
                     self._feedforward(X_batch)
-                    self._backpropagate(X_batch, t_batch, lam)
+                    self._backpropagate(X_batch, t_batch, lam_l1, lam_l2)
 
                 # reset schedulers for each epoch (some schedulers pass in this call)
                 for scheduler in self.schedulers_weight:
@@ -344,7 +346,7 @@ class FFNN:
         # this will be a^L
         return a
 
-    def _backpropagate(self, X, t, lam):
+    def _backpropagate(self, X, t, lam_l1, lam_l2):
         """
         Description:
         ------------
@@ -358,7 +360,8 @@ class FFNN:
         ------------
             I   X (np.ndarray): The design matrix, with n rows of p features each.
             II  t (np.ndarray): The target vector, with n rows of p targets.
-            III lam (float32): regularization parameter used to punish the weights in case of overfitting
+            III lam_l1 (float): L1 regularization parameter
+            IV  lam_l2 (float): L2 regularization parameter
 
         Returns:
         ------------
@@ -395,8 +398,9 @@ class FFNN:
                 1, delta_matrix.shape[1]
             )
 
-            # regularization term
-            gradient_weights += self.weights[i][1:, :] * lam
+            # regularization terms
+            gradient_weights += lam_l2 * self.weights[i][1:, :]
+            gradient_weights += lam_l1 * np.sign(self.weights[i][1:, :])
 
             # use scheduler
             update_matrix = np.vstack(

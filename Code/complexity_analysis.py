@@ -35,7 +35,8 @@ X_train, X_val, y_train, y_val = train_test_split(
 # ---- Training Settings ---- #
 epochs = 1500
 lr = 0.001
-lam = 0.0
+lam1 = 0.0
+lam2 = 0.0
 rho = 0.9
 rho2 = 0.999
 batches = 100
@@ -103,7 +104,8 @@ for act in activation_funcs:
                 scheduler=scheduler,
                 batches=batches,
                 epochs=epochs,
-                lam=lam,
+                lam_l1=lam1,
+                lam_l2=lam2,
                 X_val=X_val, t_val=y_val,
             )
 
