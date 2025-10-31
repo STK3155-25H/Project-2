@@ -249,7 +249,7 @@ for act in activation_funcs:
         plt.tight_layout()
         plot_filename = f"val_loss_heatmap_{act.__name__}.png"
         plt.savefig(os.path.join("output", run_dir, plot_filename))
-        plt.show()
+        # plt.show()
     else:
         # Interrotto: non produciamo CSV finale né plot, per indicare che questa activation non è completa.
         break
