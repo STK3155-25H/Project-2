@@ -7,114 +7,142 @@ from src.FFNN import FFNN
 from src.cost_functions import CostOLS
 from src.activation_functions import identity, LRELU, RELU, tanh
 
-def parse_model_filename(file_name):
+SEED = 314
+np.random.seed(SEED)
+
+def runge(x, noise_std=0.05):
+    noise = np.random.normal(0, noise_std, size=x.shape)
+    return 1 / (1 + 25 * x**2) + noise
+
+X = np.linspace(-1, 1, 200).reshape(-1, 1)
+y = runge(X, noise_std=0.03).reshape(-1, 1)
+
+
+
+# ---------- Name & path handling ----------
+
+
+
+def parse_model_filename(file_path: str):
     """
-    Parses the model filename to extract n_hidden, width, and activation name.
-    Expected format: model_hidden_{n_hidden}_width_{width}_act_{act_name}.npz
+    Estrae (n_hidden, width, act_name) dal NOME FILE (basename),
+    indipendentemente dalla cartella in cui si trova.
+
+    Formato atteso (case-insensitive):
+        model_hidden_{n}_width_{w}_act_{act}.npz
     """
-    pattern = r"Models\\run_(\d)_(\d)\\model_hidden_(\d+)_width_(\d+)_act_(\w+)\.npz"
-    match = re.match(pattern, file_name)
+    base = os.path.basename(file_path)
+    pattern = r"^model_hidden_(\d+)_width_(\d+)_act_([A-Za-z0-9_+-]+)\.npz$"
+    match = re.match(pattern, base, flags=re.IGNORECASE)
     if not match:
-        raise ValueError(f"Invalid filename format: {file_name}")
-    n_hidden = int(match.group(3))
-    width = int(match.group(4))
-    act_name = match.group(5)
+        raise ValueError(f"Invalid filename format: {base}")
+    n_hidden = int(match.group(1))
+    width = int(match.group(2))
+    act_name = match.group(3)
+    # normalizziamo l'activation per la lookup (es. relu/LReLU/TANH -> maiuscolo tranne 'tanh')
     return n_hidden, width, act_name
 
-def get_activation_function(act_name):
+def get_activation_function(act_name: str):
     """
-    Returns the activation function based on its name.
+    Restituisce la funzione di attivazione a partire dal nome (case-insensitive).
+    Aggiungi qui eventuali nuove attivazioni.
     """
+    key = act_name.strip().upper()
     act_dict = {
         "LRELU": LRELU,
+        "LEAKYRELU": LRELU,   # alias comodo
         "RELU": RELU,
-        "tanh": tanh,
+        "TANH": tanh,
+        "HYPERBOLICTANGENT": tanh,  # alias
     }
-    act_func = act_dict.get(act_name)
+    act_func = act_dict.get(key)
     if act_func is None:
         raise ValueError(f"Unknown activation function: {act_name}")
     return act_func
 
-def runge_true(x):
-    """
-    The true Runge function without noise.
-    """
+# ---------- Data ----------
+
+def runge_true(x: np.ndarray) -> np.ndarray:
+    """Runge function (senza rumore)."""
     return 1 / (1 + 25 * x**2)
 
-def evaluate_model(file_name, save_plot=False, plot_dir="output"):
-    """
-    Evaluates the model loaded from the given file_name.
-    - Loads the model.
-    - Predicts on a grid of x values from -1 to 1.
-    - Compares predictions to the true Runge function.
-    - Computes the MSE loss.
-    - Optionally saves the comparison plot.
+# ---------- Eval ----------
 
-    Parameters:
-    - file_name (str): The name of the model file (e.g., "model_hidden_3_width_10_act_RELU.npz").
-    - save_plot (bool): If True, saves the plot to plot_dir.
-    - plot_dir (str): Directory to save the plot if save_plot is True.
-
-    Returns:
-    - loss (float): The MSE loss between predictions and true Runge function.
+def evaluate_model(file_path: str, save_plot: bool = False, plot_dir: str = "output") -> float:
     """
-    # Parse filename
-    n_hidden, width, act_name = parse_model_filename(file_name)
-    
-    # Get activation function
+    Valuta il modello salvato in file_path:
+      - carica i pesi
+      - predice su [-1, 1]
+      - calcola MSE contro la Runge
+      - opzionalmente salva il plot
+    Ritorna: loss MSE (float)
+    """
+    # Parse dal nome file (non importa la cartella)
+    n_hidden, width, act_name = parse_model_filename(file_path)
     act_func = get_activation_function(act_name)
-    
-    # Build dimensions
+
+    # Costruzione dimensioni rete
     dims = [1] + [width] * n_hidden + [1]
-    
-    # Create FFNN instance
+
+    # Istanza rete
     net = FFNN(
         dimensions=tuple(dims),
         hidden_func=act_func,
         output_func=identity,
         cost_func=CostOLS,
     )
-    
-    # Load weights
-    model_path = os.path.join("Models", file_name)
+
+    # Path: se file_path è già esistente usalo; altrimenti prova a cercarlo sotto "Models/"
+    model_path = os.path.normpath(file_path)
     if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+        candidate = os.path.normpath(os.path.join("Models", file_path))
+        if os.path.exists(candidate):
+            model_path = candidate
+        else:
+            raise FileNotFoundError(f"Model file not found: {file_path} (also tried {candidate})")
+
+    # Carica pesi
     net.load_weights(model_path)
-    
-    # Generate evaluation data
+
+    # Dati di valutazione
     X_eval = np.linspace(-1, 1, 200).reshape(-1, 1)
     y_true = runge_true(X_eval)
-    
-    # Predict
+
+    # Predizione
     y_pred = net.predict(X_eval)
-    
-    # Compute loss (MSE)
-    loss = np.mean((y_pred - y_true)**2)
-    
-    # Plot comparison
+
+    # MSE
+    loss = float(np.mean((y_pred - y_true) ** 2))
+
+    # Plot
     plt.figure(figsize=(8, 6))
-    plt.plot(X_eval, y_true, label="True Runge Function", color="blue")
-    plt.plot(X_eval, y_pred, label="Model Prediction", color="red", linestyle="--")
-    plt.title(f"Model: {file_name}\nMSE Loss: {loss:.6f}")
+    plt.plot(X, y, label = "True with noise")
+    plt.plot(X_eval, y_true, label="True Runge Function")
+    plt.plot(X_eval, y_pred, label="Model Prediction", linestyle="--")
+    plt.title(f"Model: {os.path.basename(model_path)}\nMSE Loss: {loss:.6f}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.legend()
     plt.grid(True)
-    
+
     if save_plot:
         os.makedirs(plot_dir, exist_ok=True)
-        plot_filename = f"evaluation_{file_name.replace('.npz', '')}.png"
-        # plt.savefig(os.path.join(plot_dir, plot_filename))
-        # print(f"Plot saved to: {os.path.join(plot_dir, plot_filename)}")
+        # filename safe: sostituisco separatori dir con '__'
+        safe_name = model_path.replace(os.sep, "__").replace("/", "__")
+        plot_filename = f"evaluation_{os.path.splitext(os.path.basename(safe_name))[0]}.png"
+        out_path = os.path.join(plot_dir, plot_filename)
+        plt.savefig(out_path, dpi=150, bbox_inches="tight")
+        print(f"Plot saved to: {out_path}")
     else:
         plt.show()
-    
+
     plt.close()
-    
     return loss
 
+# ---------- CLI example ----------
+
 if __name__ == "__main__":
-    # Example usage: replace with your desired file_name
-    example_file = "Models\\run_20251030_011114\model_hidden_5_width_40_act_LRELU.npz"  # Change this to your file
+    # Esempio: percorso completo o relativo, funziona in entrambi i casi
+    example_file = "Models/run_20251031_171843/model_hidden_5_width_38_act_LRELU.npz"
     loss = evaluate_model(example_file, save_plot=True)
     print(f"Evaluation Loss: {loss:.6f}")
