@@ -1,9 +1,4 @@
-
-## Short project description
-In this project, we investigate the performance of Feed-Forward Neural Networks (FFNNs) in both function approximation and classification problems 
-# Project 2: Regression and Classification with Neural Networks and Logistic Regression
-
-## Course Information
+## Repository Information
 This repository contains the code and report for **Project 2** in the course **FYS-STK3155 - Applied Data Analysis and Machine Learning** at the University of Oslo, Autumn 2025 semester.
 
 ## Group members
