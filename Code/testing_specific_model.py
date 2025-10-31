@@ -12,13 +12,13 @@ def parse_model_filename(file_name):
     Parses the model filename to extract n_hidden, width, and activation name.
     Expected format: model_hidden_{n_hidden}_width_{width}_act_{act_name}.npz
     """
-    pattern = r"model_hidden_(\d+)_width_(\d+)_act_(\w+)\.npz"
+    pattern = r"Models\\run_(\d)_(\d)\\model_hidden_(\d+)_width_(\d+)_act_(\w+)\.npz"
     match = re.match(pattern, file_name)
     if not match:
         raise ValueError(f"Invalid filename format: {file_name}")
-    n_hidden = int(match.group(1))
-    width = int(match.group(2))
-    act_name = match.group(3)
+    n_hidden = int(match.group(3))
+    width = int(match.group(4))
+    act_name = match.group(5)
     return n_hidden, width, act_name
 
 def get_activation_function(act_name):
@@ -115,6 +115,6 @@ def evaluate_model(file_name, save_plot=False, plot_dir="output"):
 
 if __name__ == "__main__":
     # Example usage: replace with your desired file_name
-    example_file = "Models\model_hidden_2_width_20_act_LRELU.npz"  # Change this to your file
+    example_file = "Models\\run_20251030_011114\model_hidden_5_width_40_act_LRELU.npz"  # Change this to your file
     loss = evaluate_model(example_file, save_plot=True)
     print(f"Evaluation Loss: {loss:.6f}")

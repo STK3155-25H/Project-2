@@ -18,7 +18,7 @@ from src.cost_functions import CostOLS
 from src.activation_functions import sigmoid, identity, LRELU
 
 # ---- RUNGE FUNCTION DATA ---- #
-def runge(x, noise_std=0.02):
+def runge(x, noise_std=0.05):
     noise = np.random.normal(0, noise_std, size=x.shape)
     return 1 / (1 + 25 * x**2) + noise
 
@@ -31,8 +31,8 @@ X = X.reshape(-1, 1)
 y = y.reshape(-1, 1)
 
 # ---- Model Settings ---- #
-layout = [1, 20, 20, 1]  # More hidden units for better approximation
-epochs = 1
+layout = [1,4 , 1]  # More hidden units for better approximation
+epochs = 2000
 lr = 0.001
 lam = 0.0
 rho = 0.9   

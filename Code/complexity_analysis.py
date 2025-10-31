@@ -20,7 +20,7 @@ def runge(x, noise_std=0.05):
     return 1 / (1 + 25 * x**2) + noise
 
 X = np.linspace(-1, 1, 200).reshape(-1, 1)
-y = runge(X, noise_std=0).reshape(-1, 1)  # Clean labels
+y = runge(X, noise_std=0.03).reshape(-1, 1)
 
 # -------------------- TRAINING SETTINGS --------------------
 epochs = 1500
