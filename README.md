@@ -6,8 +6,12 @@ In this project, we investigate the performance of Feed-Forward Neural Networks 
 ## Course Information
 This repository contains the code and report for **Project 2** in the course **FYS-STK3155 - Applied Data Analysis and Machine Learning** at the University of Oslo, Autumn 2025 semester.
 
-## Group Members
-- [Group STK3155-25H members – assuming based on repository ownership; replace with actual names if needed]
+## Group members
+
+- **Francesco Giuseppe Minisini** — francegm@uio.no
+- **Stan Daniels**
+- **Carolina Ceccacci**
+- **Teresa Ghirlandi**
 
 ## Overview
 In this project, we explore regression and classification problems using custom implementations of optimization algorithms and machine learning models. The main focus is on developing a feed-forward neural network (FFNN) from scratch, including back-propagation, and comparing it with logistic regression for classification tasks. We also extend regression methods from previous projects by replacing matrix inversion with gradient-based optimizers.
