@@ -34,14 +34,23 @@ def build_layout(n_hidden: int, width: int):
         return [1, 1]
     return [1] + [width] * n_hidden + [1]
 
-def extract_val_loss(history: dict, net: FFNN, X_val, y_val, mode="min"):
-    """Estrae la validation loss dal history o fallback predict."""
-    val_losses = history.get("val_loss", history.get("val_errors"))
-    if val_losses is not None and len(val_losses) > 0:
-        return float(np.nanmin(val_losses) if mode == "min" else val_losses[-1])
-    # Fallback: calcola manualmente
+def extract_losses(history: dict, net: FFNN, X_val, y_val_noisy, y_val_clean, mode="min"):
+    """Estrae la validation loss dal history o fallback predict, per noisy e clean."""
     y_pred = net.predict(X_val)
-    return float(CostOLS(y_val)(y_pred))
+    
+    # Loss su y_val noisy
+    val_loss_noisy = float(CostOLS(y_val_noisy)(y_pred))
+    
+    # Loss su y_val clean
+    val_loss_clean = float(CostOLS(y_val_clean)(y_pred))
+    
+    # Se history ha val_loss, usa min/final se meglio, ma fallback a predict
+    val_losses_hist = history.get("val_loss", history.get("val_errors"))
+    if val_losses_hist is not None and len(val_losses_hist) > 0:
+        val_loss_noisy_hist = float(np.nanmin(val_losses_hist) if mode == "min" else val_losses_hist[-1])
+        val_loss_noisy = min(val_loss_noisy, val_loss_noisy_hist)  # Usa il migliore
+
+    return val_loss_noisy, val_loss_clean
 
 # -------------------- GESTIONE RUN E FOLDER --------------------
 def newest_run_dir(base_dir="Models"):
@@ -58,15 +67,16 @@ def start_new_run(base_dir="Models", output_dir="output"):
     return run_dir
 
 def has_incomplete_work(run_dir, output_dir="output", activation_funcs=None):
-    """Controlla se ci sono temp files incompleti con NaN."""
+    """Controlla se ci sono temp files incompleti con NaN per noisy o clean."""
     if activation_funcs is None:
         return False
     for act in activation_funcs:
-        temp_path = os.path.join(output_dir, run_dir, f"temp_heat_{act.__name__}.csv")
-        if os.path.exists(temp_path):
-            df = pd.read_csv(temp_path, index_col='hidden_layers')
-            if np.isnan(df.values).any():
-                return True
+        for suffix in ["noisy", "clean"]:
+            temp_path = os.path.join(output_dir, run_dir, f"temp_heat_{suffix}_{act.__name__}.csv")
+            if os.path.exists(temp_path):
+                df = pd.read_csv(temp_path, index_col='hidden_layers')
+                if np.isnan(df.values).any():
+                    return True
     return False
 
 # -------------------- MAIN SCRIPT --------------------
@@ -76,9 +86,10 @@ np.random.seed(SEED)
 
 # Dati
 X = np.linspace(-1, 1, 200).reshape(-1, 1)
-noise_global = 0.03  # Noise su tutti i dati
-noise_train_extra = 0.02  # Noise extra solo su y_train (per regularization)
-y = runge(X, noise_std=noise_global).reshape(-1, 1)
+noise_global = 0.00  # Noise su tutti i dati (per y_noisy)
+noise_train_extra = 0.03  # Noise extra solo su y_train (per regularization)
+y_noisy = runge(X, noise_std=noise_global).reshape(-1, 1)
+y_clean = runge(X, noise_std=0.0).reshape(-1, 1)  # Versione clean per eval
 
 # Training settings
 epochs = 1500
@@ -133,6 +144,9 @@ if is_continuing and os.path.exists(config_path):
     VAL_LOSS_MODE = config['VAL_LOSS_MODE']
     noise_global = float(config['noise_global'])
     noise_train_extra = float(config['noise_train_extra'])
+    # Rigenera y_noisy e y_clean con seed
+    y_noisy = runge(X, noise_std=noise_global).reshape(-1, 1)
+    y_clean = runge(X, noise_std=0.0).reshape(-1, 1)
 else:
     config = {
         'SEED': SEED,
@@ -153,42 +167,60 @@ else:
     with open(config_path, 'w') as f:
         json.dump(config, f, indent=4)
 
-# Split dati (dopo seed)
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.2, random_state=SEED, shuffle=True
+# Split dati (dopo seed) - usa y_noisy per split e train
+X_train, X_val, y_train_noisy, y_val_noisy = train_test_split(
+    X, y_noisy, test_size=0.2, random_state=SEED, shuffle=True
 )
 # Aggiungi noise extra solo su train
-y_train += np.random.normal(0, noise_train_extra, y_train.shape)
+y_train_noisy += np.random.normal(0, noise_train_extra, y_train_noisy.shape)
+
+# Genera y_val_clean corrispondente (deterministico)
+y_val_clean = runge(X_val, noise_std=0.0)
 
 # -------------------- LOOP SU ACTIVATION --------------------
 for act in activation_funcs:
-    csv_filename = f"val_loss_data_{act.__name__}.csv"
-    csv_path = os.path.join(OUTPUT_DIR, run_dir, csv_filename)
-    temp_heat_path = os.path.join(OUTPUT_DIR, run_dir, f"temp_heat_{act.__name__}.csv")
+    # Path per noisy
+    csv_noisy = f"val_loss_data_noisy_{act.__name__}.csv"
+    csv_path_noisy = os.path.join(OUTPUT_DIR, run_dir, csv_noisy)
+    temp_heat_path_noisy = os.path.join(OUTPUT_DIR, run_dir, f"temp_heat_noisy_{act.__name__}.csv")
+    
+    # Path per clean
+    csv_clean = f"val_loss_data_clean_{act.__name__}.csv"
+    csv_path_clean = os.path.join(OUTPUT_DIR, run_dir, csv_clean)
+    temp_heat_path_clean = os.path.join(OUTPUT_DIR, run_dir, f"temp_heat_clean_{act.__name__}.csv")
 
-    # Skip se già completato
-    if os.path.exists(csv_path):
-        print(f"[{act.__name__}] already completed. Skipping.")
+    # Skip se entrambi già completati
+    if os.path.exists(csv_path_noisy) and os.path.exists(csv_path_clean):
+        print(f"[{act.__name__}] already completed for both noisy and clean. Skipping.")
         continue
 
-    # Carica o crea heatmap temporanea
-    if os.path.exists(temp_heat_path):
-        df_temp = pd.read_csv(temp_heat_path, index_col='hidden_layers')
-        # Controlla dimensioni
-        if list(df_temp.index.astype(int)) != n_hidden_list or list(df_temp.columns.astype(int)) != n_perceptrons_list:
-            heat = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
+    # Carica o crea heatmaps temporanee per noisy
+    if os.path.exists(temp_heat_path_noisy):
+        df_temp_noisy = pd.read_csv(temp_heat_path_noisy, index_col='hidden_layers')
+        if list(df_temp_noisy.index.astype(int)) != n_hidden_list or list(df_temp_noisy.columns.astype(int)) != n_perceptrons_list:
+            heat_noisy = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
         else:
-            heat = df_temp.values
+            heat_noisy = df_temp_noisy.values
     else:
-        heat = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
+        heat_noisy = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
+
+    # Carica o crea heatmaps temporanee per clean
+    if os.path.exists(temp_heat_path_clean):
+        df_temp_clean = pd.read_csv(temp_heat_path_clean, index_col='hidden_layers')
+        if list(df_temp_clean.index.astype(int)) != n_hidden_list or list(df_temp_clean.columns.astype(int)) != n_perceptrons_list:
+            heat_clean = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
+        else:
+            heat_clean = df_temp_clean.values
+    else:
+        heat_clean = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan, dtype=float)
 
     interrupted = False
 
     try:
         for i_h, n_hidden in enumerate(n_hidden_list):
             for j_w, width in enumerate(n_perceptrons_list):
-                # Skip se già calcolato
-                if not np.isnan(heat[i_h, j_w]):
+                # Skip se già calcolato (controlla noisy, ma since synced, ok)
+                if not np.isnan(heat_noisy[i_h, j_w]):
                     continue
 
                 layout = build_layout(n_hidden, width)
@@ -210,13 +242,13 @@ for act in activation_funcs:
 
                 # Fit senza salvare su interrupt (riparte da zero se interrotto)
                 history = net.fit(
-                    X=X_train, t=y_train,
+                    X=X_train, t=y_train_noisy,
                     scheduler=scheduler,
                     batches=batches,
                     epochs=epochs,
                     lam_l1=lam_l1,
                     lam_l2=lam_l2,
-                    X_val=X_val, t_val=y_val,
+                    X_val=X_val, t_val=y_val_noisy,  # Usa noisy per val durante training
                     save_on_interrupt=None,  # Non salva pesi parziali su interrupt
                 )
 
@@ -225,47 +257,75 @@ for act in activation_funcs:
                 with open(done_marker, "w") as _f:
                     _f.write("ok")
 
-                # Estrai loss
-                val_loss = extract_val_loss(history, net, X_val, y_val, mode=VAL_LOSS_MODE)
-                heat[i_h, j_w] = val_loss
+                # Estrai entrambe le losses
+                val_loss_noisy, val_loss_clean = extract_losses(
+                    history, net, X_val, y_val_noisy, y_val_clean, mode=VAL_LOSS_MODE
+                )
+                heat_noisy[i_h, j_w] = val_loss_noisy
+                heat_clean[i_h, j_w] = val_loss_clean
 
-                # Salva temp heatmap
-                df_temp = pd.DataFrame(heat, index=n_hidden_list, columns=n_perceptrons_list)
-                df_temp.index.name = 'hidden_layers'
-                df_temp.columns.name = 'neurons_per_layer'
-                df_temp.to_csv(temp_heat_path)
+                # Salva temp heatmaps
+                df_temp_noisy = pd.DataFrame(heat_noisy, index=n_hidden_list, columns=n_perceptrons_list)
+                df_temp_noisy.index.name = 'hidden_layers'
+                df_temp_noisy.columns.name = 'neurons_per_layer'
+                df_temp_noisy.to_csv(temp_heat_path_noisy)
+                
+                df_temp_clean = pd.DataFrame(heat_clean, index=n_hidden_list, columns=n_perceptrons_list)
+                df_temp_clean.index.name = 'hidden_layers'
+                df_temp_clean.columns.name = 'neurons_per_layer'
+                df_temp_clean.to_csv(temp_heat_path_clean)
 
     except KeyboardInterrupt:
         print("\nInterrupted by user. Current model will be retrained from scratch next time.")
         interrupted = True
 
-    # Se non interrotto, finalizza
+    # Se non interrotto, finalizza entrambe
     if not interrupted:
-        df = pd.DataFrame(heat, index=n_hidden_list, columns=n_perceptrons_list)
-        df.index.name = 'hidden_layers'
-        df.columns.name = 'neurons_per_layer'
-        df.to_csv(csv_path)
-        if os.path.exists(temp_heat_path):
-            os.remove(temp_heat_path)
+        # Noisy
+        if not os.path.exists(csv_path_noisy):
+            df_noisy = pd.DataFrame(heat_noisy, index=n_hidden_list, columns=n_perceptrons_list)
+            df_noisy.index.name = 'hidden_layers'
+            df_noisy.columns.name = 'neurons_per_layer'
+            df_noisy.to_csv(csv_path_noisy)
+            if os.path.exists(temp_heat_path_noisy):
+                os.remove(temp_heat_path_noisy)
 
-        # Plot heatmap
-        plt.figure(figsize=(10, 5))
-        im = plt.imshow(
-            heat,
-            aspect="auto",
-            origin="upper",
-            interpolation="nearest"
-        )
-        plt.colorbar(im, label="Validation Loss (OLS)")
-        plt.title(f"Validation Loss Heatmap — activation: {act.__name__}")
-        plt.xlabel("Neurons per hidden layer")
-        plt.ylabel("Number of hidden layers")
-        plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list, rotation=45)
-        plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
-        plt.tight_layout()
-        plot_filename = f"val_loss_heatmap_{act.__name__}.png"
-        plt.savefig(os.path.join(OUTPUT_DIR, run_dir, plot_filename))
-        plt.close()  # Chiudi figura per evitare memory leak
+            # Plot noisy
+            plt.figure(figsize=(10, 5))
+            im = plt.imshow(heat_noisy, aspect="auto", origin="upper", interpolation="nearest")
+            plt.colorbar(im, label="Validation Loss (OLS) - Noisy")
+            plt.title(f"Validation Loss Heatmap (Noisy) — activation: {act.__name__}")
+            plt.xlabel("Neurons per hidden layer")
+            plt.ylabel("Number of hidden layers")
+            plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list, rotation=45)
+            plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
+            plt.tight_layout()
+            plot_filename_noisy = f"val_loss_heatmap_noisy_{act.__name__}.png"
+            plt.savefig(os.path.join(OUTPUT_DIR, run_dir, plot_filename_noisy))
+            plt.close()
+
+        # Clean
+        if not os.path.exists(csv_path_clean):
+            df_clean = pd.DataFrame(heat_clean, index=n_hidden_list, columns=n_perceptrons_list)
+            df_clean.index.name = 'hidden_layers'
+            df_clean.columns.name = 'neurons_per_layer'
+            df_clean.to_csv(csv_path_clean)
+            if os.path.exists(temp_heat_path_clean):
+                os.remove(temp_heat_path_clean)
+
+            # Plot clean
+            plt.figure(figsize=(10, 5))
+            im = plt.imshow(heat_clean, aspect="auto", origin="upper", interpolation="nearest")
+            plt.colorbar(im, label="Validation Loss (OLS) - Clean")
+            plt.title(f"Validation Loss Heatmap (Clean) — activation: {act.__name__}")
+            plt.xlabel("Neurons per hidden layer")
+            plt.ylabel("Number of hidden layers")
+            plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list, rotation=45)
+            plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
+            plt.tight_layout()
+            plot_filename_clean = f"val_loss_heatmap_clean_{act.__name__}.png"
+            plt.savefig(os.path.join(OUTPUT_DIR, run_dir, plot_filename_clean))
+            plt.close()
     else:
         # Interrotto: esci dal loop activation
         break
