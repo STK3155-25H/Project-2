@@ -534,7 +534,7 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-Code/Models/
-Code/output
+# Code/Models/
+# Code/output
 *.png
-run_*
+Code/run_*
