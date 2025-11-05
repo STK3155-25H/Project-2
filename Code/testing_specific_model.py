@@ -143,6 +143,6 @@ def evaluate_model(file_path: str, save_plot: bool = False, plot_dir: str = "out
 
 if __name__ == "__main__":
     # Esempio: percorso completo o relativo, funziona in entrambi i casi
-    example_file = "Models/run_20251031_171843/model_hidden_5_width_38_act_LRELU.npz"
+    example_file = "Models/run_20251101_014640/model_hidden_5_width_38_act_RELU.npz"
     loss = evaluate_model(example_file, save_plot=True)
     print(f"Evaluation Loss: {loss:.6f}")

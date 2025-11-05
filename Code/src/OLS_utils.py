@@ -23,7 +23,7 @@ else:
 np.random.seed(seed)
 # -----------------------------------------------------------------------------------------
 # Runge function
-def runge_function(x, noise=False):
+def runge_function(x, noise = 0.):
     """
     Compute the Runge function f(x) = 1 / (1 + 25x^2).
     
@@ -42,7 +42,7 @@ def runge_function(x, noise=False):
     # np.random.seed(seed)
     y = 1 / (1 + 25 * x**2)
     if noise:
-        y += np.random.normal(0, 0.3, size=len(x), )
+        y += np.random.normal(0, noise, size=len(x), )
     return y
 
 # -----------------------------------------------------------------------------------------
@@ -184,7 +184,7 @@ def polynomial_features_scaled(x, degree, intercept=True, col_means=None, col_st
 # Splitting and scaling function for the data
 def split_scale(x, y, random_state=None):
     """
-    Split dataset into train/test sets and scale features.
+    Split dataset into train/test sets and scale features using scikit-learn StandardScaler.
 
     Parameters
     ----------
@@ -204,26 +204,29 @@ def split_scale(x, y, random_state=None):
     y_test_centered : ndarray of shape (n_test,)
         Centered test targets.
     """
+
+    # Use provided random_state if given, else fall back to global seed
     rs = seed if random_state is None else random_state
 
-    # split the data
-    x_train, x_test, y_train, y_test = train_test_split(x, y, test_size=0.33, random_state=rs)
-    # reshape the x datas to make them a 2d matrix
+    # Train/test split
+    x_train, x_test, y_train, y_test = train_test_split(
+        x, y, test_size=0.33, random_state=rs
+    )
+
+    # Reshape x to 2D arrays
     X_train = x_train.reshape(-1, 1)
     X_test = x_test.reshape(-1, 1)
-    # calculate mean and std on the training set for X
-    X_mean = X_train.mean(axis=0)
-    X_std = X_train.std(axis=0)
-    X_std[X_std == 0] = 1 # safe guard
-    # scale the x data sets
-    X_train_scaled = (X_train - X_mean) / X_std
-    X_test_scaled = (X_test - X_mean) / X_std
-    # calculate mean of y
+
+    # === Scaling via Sklearn StandardScaler ===
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    # === Centering y like in original function ===
     y_mean = y_train.mean()
-    # center the y data sets
     y_train_centered = y_train - y_mean
     y_test_centered = y_test - y_mean
-    
+
     return X_train_scaled, X_test_scaled, y_train_centered, y_test_centered
 
 # -----------------------------------------------------------------------------------------

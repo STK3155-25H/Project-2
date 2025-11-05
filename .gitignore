@@ -538,3 +538,8 @@ __marimo__/
 # Code/output
 # *.png
 Code/run_*
+Code/codeexport.config.psd1
+Code/exported_cb
+# Export codebase artifacts
+codeexport.config.psd1
+codebase.txt

@@ -118,7 +118,7 @@ lam_l2_list = np.logspace(-6, -1, 10).tolist()
 
 # Cartelle base
 BASE_DIR = "Models_Reg"
-OUTPUT_DIR = "output_reg"
+OUTPUT_DIR = "output/l1_l2_analysis"
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
