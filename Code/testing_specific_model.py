@@ -68,7 +68,7 @@ def runge_true(x: np.ndarray) -> np.ndarray:
 
 # ---------- Eval ----------
 
-def evaluate_model(file_path: str, save_plot: bool = False, plot_dir: str = "output") -> float:
+def evaluate_model(file_path: str, save_plot: bool = False, plot_dir: str = "output/specific_model_eval") -> float:
     """
     Valuta il modello salvato in file_path:
       - carica i pesi
