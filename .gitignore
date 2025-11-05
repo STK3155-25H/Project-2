@@ -536,5 +536,5 @@ __marimo__/
 
 # Code/Models/
 # Code/output
-*.png
+# *.png
 Code/run_*
