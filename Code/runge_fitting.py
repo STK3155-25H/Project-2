@@ -40,7 +40,7 @@ rho2 = 0.999
 
 net = FFNN(
     dimensions=layout,
-    hidden_func=LRELU,
+    hidden_func=sigmoid,
     output_func=identity,
     cost_func=CostOLS,
     seed=SEED,

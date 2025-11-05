@@ -534,6 +534,12 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
-Code/Models/
-Code/output
-*.png
+# Code/Models/
+# Code/output
+# *.png
+Code/run_*
+Code/codeexport.config.psd1
+Code/exported_cb
+# Export codebase artifacts
+codeexport.config.psd1
+codebase.txt

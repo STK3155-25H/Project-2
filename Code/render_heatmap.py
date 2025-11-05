@@ -33,7 +33,7 @@ def main(csv_path: str = "data.csv", out_path: str | None = None):
 
     # ---- Plot heatmap ----
     fig, ax = plt.subplots(figsize=(10, 5))
-    im = ax.imshow(data, aspect="auto", vmin= 0.00000000000000001, vmax=0.001)  # usa la colormap di default
+    im = ax.imshow(data, aspect="auto", vmin= 0.00000000000000001, vmax=0.005)  # usa la colormap di default
 
     # Tick & label
     ax.set_xticks(np.arange(len(x_labels_sorted)))
@@ -60,5 +60,5 @@ def main(csv_path: str = "data.csv", out_path: str | None = None):
     print(f"Heatmap salvata in: {out_path}")
 
 if __name__ == "__main__":
-    csv = sys.argv[1] if len(sys.argv) > 1 else "output/run_20251030_011114/val_loss_data_LRELU.csv"
+    csv = sys.argv[1] if len(sys.argv) > 1 else "output/run_20251031_171843/val_loss_data_RELU.csv"
     main(csv)
