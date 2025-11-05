@@ -15,10 +15,10 @@ np.random.seed(SEED)
 from sklearn.datasets import make_moons
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
-from FFNN import FFNN
-from scheduler import Scheduler,Momentum, Adam
-from cost_functions import CostCrossEntropy, CostLogReg
-from activation_functions import sigmoid 
+from src.FFNN import FFNN
+from src.scheduler import Scheduler,Momentum, Adam
+from src.cost_functions import CostCrossEntropy, CostLogReg
+from src.activation_functions import sigmoid 
 
 X, y = make_moons(n_samples=500, noise=0.15, random_state=314)
 y = y.reshape(-1, 1)
@@ -30,8 +30,9 @@ X_train, X_test, y_train, y_test = train_test_split(
 layout = [2, 20,20, 1]
 epochs = 200
 lr = 0.01
-lam = 0.0
 rho = 0.9
+lam1 = 0.0
+lam2 = 0.0
 rho2 = 0.999
 
 net = FFNN(
@@ -43,7 +44,7 @@ net = FFNN(
 )
 
 scheduler = Adam(lr, rho, rho2)
-net.fit(X=X_train, t=y_train, scheduler=scheduler, batches=5, epochs=100, lam=lam, X_val= X_test,t_val=y_test)
+net.fit(X=X_train, t=y_train, scheduler=scheduler, batches=5, epochs=100, lam_l1=lam1, lam_l2=lam2, X_val= X_test,t_val=y_test)
 
 xx, yy = np.meshgrid(np.linspace(-2, 3, 200), np.linspace(-1.5, 2, 200))
 grid = np.c_[xx.ravel(), yy.ravel()]
