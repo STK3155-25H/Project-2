@@ -40,6 +40,7 @@ def normalize_act_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "", name).lower()
 
 def get_activation_function(act_name: str):
+
     """Return activation callable from a name (case-insensitive, with aliases)."""
     key = normalize_act_name(act_name)
     mapping = {
@@ -50,6 +51,7 @@ def get_activation_function(act_name: str):
         "tanh": tanh,
         "sigmoid": sigmoid,
         "identity": identity,  # supported if you ever train with it
+
     }
     func = mapping.get(key)
     if func is None:
@@ -246,3 +248,4 @@ if __name__ == "__main__":
         base_plot_dir="output/specific_model_eval",
         save_csv=True,
     )
+

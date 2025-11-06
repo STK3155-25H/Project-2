@@ -22,7 +22,7 @@ from src.cost_functions import CostOLS
 # -----------------------------
 # Settings
 # -----------------------------
-# NOTE: rimpiazza questi con i best effettivi letti dal CSV della Part A quando disponibile
+# NOTE: replace these with the actual bests read from the Part A CSV when available
 best_n = 1500
 best_degree = 10
 
