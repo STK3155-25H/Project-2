@@ -1,0 +1,3 @@
+activation,mse,model_path
+LRELU,0.00024306,Models/run_20251101_014640/model_hidden_3_width_30_act_LRELU.npz
+RELU,0.00080577,Models/run_20251101_014640/model_hidden_3_width_30_act_RELU.npz
