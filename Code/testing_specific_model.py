@@ -1,148 +1,248 @@
 import os
 import re
+import csv
 import numpy as np
 import matplotlib.pyplot as plt
 
 from src.FFNN import FFNN
 from src.cost_functions import CostOLS
-from src.activation_functions import identity, LRELU, RELU, tanh
+from src.activation_functions import identity, LRELU, RELU, tanh, sigmoid
 
+# -----------------------------
+# Reproducibility
+# -----------------------------
 SEED = 314
 np.random.seed(SEED)
 
-def runge(x, noise_std=0.05):
+# -----------------------------
+# Data generators
+# -----------------------------
+def runge_noisy(x: np.ndarray, noise_std: float = 0.05) -> np.ndarray:
+    """Runge function with optional Gaussian noise."""
     noise = np.random.normal(0, noise_std, size=x.shape)
-    return 1 / (1 + 25 * x**2) + noise
-
-X = np.linspace(-1, 1, 200).reshape(-1, 1)
-y = runge(X, noise_std=0.03).reshape(-1, 1)
-
-
-
-# ---------- Name & path handling ----------
-
-
-
-def parse_model_filename(file_path: str):
-    """
-    Estrae (n_hidden, width, act_name) dal NOME FILE (basename),
-    indipendentemente dalla cartella in cui si trova.
-
-    Formato atteso (case-insensitive):
-        model_hidden_{n}_width_{w}_act_{act}.npz
-    """
-    base = os.path.basename(file_path)
-    pattern = r"^model_hidden_(\d+)_width_(\d+)_act_([A-Za-z0-9_+-]+)\.npz$"
-    match = re.match(pattern, base, flags=re.IGNORECASE)
-    if not match:
-        raise ValueError(f"Invalid filename format: {base}")
-    n_hidden = int(match.group(1))
-    width = int(match.group(2))
-    act_name = match.group(3)
-    # normalizziamo l'activation per la lookup (es. relu/LReLU/TANH -> maiuscolo tranne 'tanh')
-    return n_hidden, width, act_name
-
-def get_activation_function(act_name: str):
-    """
-    Restituisce la funzione di attivazione a partire dal nome (case-insensitive).
-    Aggiungi qui eventuali nuove attivazioni.
-    """
-    key = act_name.strip().upper()
-    act_dict = {
-        "LRELU": LRELU,
-        "LEAKYRELU": LRELU,   # alias comodo
-        "RELU": RELU,
-        "TANH": tanh,
-        "HYPERBOLICTANGENT": tanh,  # alias
-    }
-    act_func = act_dict.get(key)
-    if act_func is None:
-        raise ValueError(f"Unknown activation function: {act_name}")
-    return act_func
-
-# ---------- Data ----------
+    return 1.0 / (1.0 + 25.0 * x**2) + noise
 
 def runge_true(x: np.ndarray) -> np.ndarray:
-    """Runge function (senza rumore)."""
-    return 1 / (1 + 25 * x**2)
+    """Noise-free Runge function."""
+    return 1.0 / (1.0 + 25.0 * x**2)
 
-# ---------- Eval ----------
+# Reference noisy sample (for background in plots)
+X_REF = np.linspace(-1, 1, 200).reshape(-1, 1)
+Y_REF_NOISY = runge_noisy(X_REF, noise_std=0.03)
 
-def evaluate_model(file_path: str, save_plot: bool = False, plot_dir: str = "output/specific_model_eval") -> float:
+# -----------------------------
+# Activation helpers
+# -----------------------------
+def normalize_act_name(name: str) -> str:
+    """Canonicalize an activation name to lowercase alphanumerics."""
+    if name is None:
+        return ""
+    return re.sub(r"[^A-Za-z0-9]+", "", name).lower()
+
+def get_activation_function(act_name: str):
+    """Return activation callable from a name (case-insensitive, with aliases)."""
+    key = normalize_act_name(act_name)
+    mapping = {
+        "relu": RELU,
+        "lrelu": LRELU,
+        "leakyrelu": LRELU,
+        "leaky": LRELU,
+        "tanh": tanh,
+        "sigmoid": sigmoid,
+        "identity": identity,  # supported if you ever train with it
+    }
+    func = mapping.get(key)
+    if func is None:
+        raise ValueError(f"Unknown activation function: {act_name!r}")
+    return func
+
+def canonical_file_token(act_name: str) -> str:
+    """Token as it appears in filenames for a given activation."""
+    key = normalize_act_name(act_name)
+    token_map = {
+        "relu": "RELU",
+        "lrelu": "LRELU",
+        "leakyrelu": "LRELU",
+        "leaky": "LRELU",
+        "tanh": "tanh",
+        "sigmoid": "sigmoid",
+        "identity": "identity",
+    }
+    return token_map.get(key, act_name)
+
+# -----------------------------
+# Filenames and folders
+# -----------------------------
+def model_filename(n_hidden: int, width: int, act_name: str) -> str:
+    """Expected model filename for a layout + activation."""
+    token = canonical_file_token(act_name)
+    return f"model_hidden_{n_hidden}_width_{width}_act_{token}.npz"
+
+def layout_dir_name(n_hidden: int, width: int) -> str:
+    """Folder name for a specific layout."""
+    return f"hidden{n_hidden}_width{width}"
+
+def run_layout_output_dir(base_out: str, run_dir: str, n_hidden: int, width: int) -> str:
     """
-    Valuta il modello salvato in file_path:
-      - carica i pesi
-      - predice su [-1, 1]
-      - calcola MSE contro la Runge
-      - opzionalmente salva il plot
-    Ritorna: loss MSE (float)
+    Output directory:
+      base_out / <run_name> / hidden<N>_width<W> /
     """
-    # Parse dal nome file (non importa la cartella)
-    n_hidden, width, act_name = parse_model_filename(file_path)
-    act_func = get_activation_function(act_name)
+    run_name = os.path.basename(os.path.normpath(run_dir))
+    return os.path.join(base_out, run_name, layout_dir_name(n_hidden, width))
 
-    # Costruzione dimensioni rete
+# -----------------------------
+# Core evaluation
+# -----------------------------
+def evaluate_one_model(
+    model_path: str,
+    n_hidden: int,
+    width: int,
+    hidden_activation_name: str,
+    save_plot: bool,
+    layout_out_dir: str,
+) -> float:
+    """
+    Load one model, predict on [-1,1], compute MSE vs true Runge,
+    and optionally save a plot to the layout-specific directory.
+    Returns the MSE.
+
+    Raises FileNotFoundError if model_path doesn't exist.
+    """
+    hidden_act = get_activation_function(hidden_activation_name)
     dims = [1] + [width] * n_hidden + [1]
 
-    # Istanza rete
     net = FFNN(
         dimensions=tuple(dims),
-        hidden_func=act_func,
+        hidden_func=hidden_act,
         output_func=identity,
         cost_func=CostOLS,
     )
 
-    # Path: se file_path è già esistente usalo; altrimenti prova a cercarlo sotto "Models/"
-    model_path = os.path.normpath(file_path)
     if not os.path.exists(model_path):
-        candidate = os.path.normpath(os.path.join("Models", file_path))
-        if os.path.exists(candidate):
-            model_path = candidate
-        else:
-            raise FileNotFoundError(f"Model file not found: {file_path} (also tried {candidate})")
+        raise FileNotFoundError(f"Model file not found: {model_path}")
 
-    # Carica pesi
     net.load_weights(model_path)
 
-    # Dati di valutazione
     X_eval = np.linspace(-1, 1, 200).reshape(-1, 1)
     y_true = runge_true(X_eval)
-
-    # Predizione
     y_pred = net.predict(X_eval)
-
-    # MSE
-    loss = float(np.mean((y_pred - y_true) ** 2))
+    mse = float(np.mean((y_pred - y_true) ** 2))
 
     # Plot
     plt.figure(figsize=(8, 6))
-    plt.plot(X, y, label = "True with noise")
-    plt.plot(X_eval, y_true, label="True Runge Function")
-    plt.plot(X_eval, y_pred, label="Model Prediction", linestyle="--")
-    plt.title(f"Model: {os.path.basename(model_path)}\nMSE Loss: {loss:.6f}")
+    plt.plot(X_REF, Y_REF_NOISY, label="Noisy sample", linewidth=1, alpha=0.7)
+    plt.plot(X_eval, y_true, label="True Runge", linewidth=2)
+    plt.plot(X_eval, y_pred, label="Model prediction", linestyle="--", linewidth=2)
+    plt.title(f"{os.path.basename(model_path)}\nMSE: {mse:.6f}")
     plt.xlabel("x")
     plt.ylabel("y")
     plt.legend()
     plt.grid(True)
 
     if save_plot:
-        os.makedirs(plot_dir, exist_ok=True)
-        # filename safe: sostituisco separatori dir con '__'
-        safe_name = model_path.replace(os.sep, "__").replace("/", "__")
-        plot_filename = f"evaluation_{os.path.splitext(os.path.basename(safe_name))[0]}.png"
-        out_path = os.path.join(plot_dir, plot_filename)
-        plt.savefig(out_path, dpi=150, bbox_inches="tight")
-        print(f"Plot saved to: {out_path}")
+        os.makedirs(layout_out_dir, exist_ok=True)
+        png_name = f"eval_{model_filename(n_hidden, width, hidden_activation_name)[:-4]}.png"
+        out_png = os.path.join(layout_out_dir, png_name)
+        plt.savefig(out_png, dpi=150, bbox_inches="tight")
+        print(f"[Saved] {out_png}")
     else:
         plt.show()
 
     plt.close()
-    return loss
+    return mse
 
-# ---------- CLI example ----------
+# -----------------------------
+# Batch runner (run + layout)
+# -----------------------------
+def evaluate_all_activations_for_layout(
+    run_dir: str,
+    n_hidden: int,
+    width: int,
+    activations: list | None = None,
+    save_plot: bool = True,
+    base_plot_dir: str = "output/specific_model_eval",
+    save_csv: bool = True,
+) -> dict:
+    """
+    Evaluate a set of activations for a given run folder and layout.
+    Creates a run-specific + layout-specific output folder:
+        base_plot_dir/<run_name>/hidden<N>_width<W>/
 
+    Missing models are skipped without raising.
+    Returns a dict: activation -> {"mse": float, "model_path": str}
+    """
+    if activations is None:
+        activations = ["RELU", "LRELU", "tanh", "sigmoid"]
+
+    run_dir = os.path.normpath(run_dir)
+    if not os.path.isdir(run_dir):
+        raise NotADirectoryError(f"Run directory not found: {run_dir}")
+
+    layout_out_dir = run_layout_output_dir(base_plot_dir, run_dir, n_hidden, width)
+    os.makedirs(layout_out_dir, exist_ok=True)
+
+    print(f"== Evaluating run='{run_dir}', layout=hidden{n_hidden}, width={width} ==")
+    print(f"   Output -> {layout_out_dir}")
+
+    results = {}
+
+    for act in activations:
+        fname = model_filename(n_hidden, width, act)
+        model_path = os.path.join(run_dir, fname)
+
+        try:
+            mse = evaluate_one_model(
+                model_path=model_path,
+                n_hidden=n_hidden,
+                width=width,
+                hidden_activation_name=act,
+                save_plot=save_plot,
+                layout_out_dir=layout_out_dir,
+            )
+            results[act] = {"mse": mse, "model_path": model_path}
+            print(f"[OK]   {act:<8} MSE={mse:.6e}")
+        except FileNotFoundError:
+            print(f"[Skip] {act:<8} (file not found)")
+        except ValueError as e:
+            # Unknown activation mapping -> skip
+            print(f"[Skip] {act:<8} ({e})")
+        except Exception as e:
+            # Any other error (shape mismatch, etc.) -> skip
+            print(f"[Skip] {act:<8} (error: {type(e).__name__}: {e})")
+
+    if save_csv and results:
+        csv_path = os.path.join(layout_out_dir, "summary.csv")
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["activation", "mse", "model_path"])
+            for act, info in sorted(results.items(), key=lambda kv: kv[1]["mse"]):
+                writer.writerow([act, f"{info['mse']:.8f}", info["model_path"]])
+        print(f"[Saved] summary CSV -> {csv_path}")
+
+    if not results:
+        print("[Info] No models were evaluated (all missing or errored).")
+
+    return results
+
+# -----------------------------
+# CLI example
+# -----------------------------
 if __name__ == "__main__":
-    # Esempio: percorso completo o relativo, funziona in entrambi i casi
-    example_file = "Models/run_20251101_014640/model_hidden_5_width_38_act_RELU.npz"
-    loss = evaluate_model(example_file, save_plot=True)
-    print(f"Evaluation Loss: {loss:.6f}")
+    # Choose the specific run folder and desired layout
+    RUN_DIR = "Models/run_20251101_014640"
+    N_HIDDEN = 5
+    WIDTH = 38
+
+    # None -> tries default set; or pass your own list:
+    # ACTIVATIONS = ["relu", "lrelu", "tanh", "sigmoid", "identity"]
+    ACTIVATIONS = None
+
+    evaluate_all_activations_for_layout(
+        run_dir=RUN_DIR,
+        n_hidden=N_HIDDEN,
+        width=WIDTH,
+        activations=ACTIVATIONS,
+        save_plot=True,
+        base_plot_dir="output/specific_model_eval",
+        save_csv=True,
+    )
