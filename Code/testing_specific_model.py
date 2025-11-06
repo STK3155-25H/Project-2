@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from src.FFNN import FFNN
 from src.cost_functions import CostOLS
-from src.activation_functions import identity, LRELU, RELU, tanh, sigmoid
+from src.activation_functions import identity, LRELU, RELU, sigmoid
 
 # -----------------------------
 # Reproducibility
@@ -48,7 +48,6 @@ def get_activation_function(act_name: str):
         "lrelu": LRELU,
         "leakyrelu": LRELU,
         "leaky": LRELU,
-        "tanh": tanh,
         "sigmoid": sigmoid,
         "identity": identity,  # supported if you ever train with it
 
@@ -66,7 +65,7 @@ def canonical_file_token(act_name: str) -> str:
         "lrelu": "LRELU",
         "leakyrelu": "LRELU",
         "leaky": "LRELU",
-        "tanh": "tanh",
+    
         "sigmoid": "sigmoid",
         "identity": "identity",
     }
@@ -183,7 +182,7 @@ def evaluate_all_activations_for_layout(
         }
     """
     if activations is None:
-        activations = ["RELU", "LRELU", "tanh", "sigmoid"]
+        activations = ["RELU", "LRELU", "sigmoid"]
 
     run_dir = os.path.normpath(run_dir)
     if not os.path.isdir(run_dir):
@@ -284,12 +283,12 @@ def evaluate_all_activations_for_layout(
 # -----------------------------
 if __name__ == "__main__":
     # Choose the specific run folder and desired layout
-    RUN_DIR = "Models/run_20251101_014640"
-    N_HIDDEN = 5
-    WIDTH = 38
+    RUN_DIR = "Models/run_20251105_110618"
+    N_HIDDEN = 3
+    WIDTH = 30
 
     # None -> tries default set; or pass your own list:
-    # ACTIVATIONS = ["relu", "lrelu", "tanh", "sigmoid", "identity"]
+    # ACTIVATIONS = ["relu", "lrelu", "sigmoid", "identity"]
     ACTIVATIONS = None
 
     evaluate_all_activations_for_layout(
