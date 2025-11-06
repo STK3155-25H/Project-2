@@ -60,5 +60,5 @@ def main(csv_path: str = "data.csv", out_path: str | None = None):
     print(f"Heatmap salvata in: {out_path}")
 
 if __name__ == "__main__":
-    csv = sys.argv[1] if len(sys.argv) > 1 else "output/run_20251031_171843/val_loss_data_RELU.csv"
+    csv = sys.argv[1] if len(sys.argv) > 1 else "output/run_20251105_110618/val_loss_data_clean_RELU.csv"
     main(csv)
