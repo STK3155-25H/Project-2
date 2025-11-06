@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 from src.FFNN import FFNN
 from src.cost_functions import CostOLS
-from src.activation_functions import identity, LRELU, RELU, tanh
+from src.activation_functions import identity, LRELU, RELU, tanh, sigmoid
 
 SEED = 314
 np.random.seed(SEED)
@@ -52,8 +52,9 @@ def get_activation_function(act_name: str):
         "LRELU": LRELU,
         "LEAKYRELU": LRELU,   # alias comodo
         "RELU": RELU,
-        "TANH": tanh,
-        "HYPERBOLICTANGENT": tanh,  # alias
+        "tanh": tanh,
+        "HYPERBOLICTANGENT": tanh,
+        "sigmoid": sigmoid  # alias
     }
     act_func = act_dict.get(key)
     if act_func is None:
@@ -143,6 +144,6 @@ def evaluate_model(file_path: str, save_plot: bool = False, plot_dir: str = "out
 
 if __name__ == "__main__":
     # Esempio: percorso completo o relativo, funziona in entrambi i casi
-    example_file = "Models/run_20251101_014640/model_hidden_5_width_38_act_RELU.npz"
+    example_file = "Models/run_20251105_110618/model_hidden_2_width_38_act_sigmoid.npz"
     loss = evaluate_model(example_file, save_plot=True)
     print(f"Evaluation Loss: {loss:.6f}")
