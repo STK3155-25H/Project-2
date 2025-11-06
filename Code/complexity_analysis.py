@@ -101,7 +101,7 @@ VAL_LOSS_MODE = "avg_last_n" # "min" per minima val_loss, "final" per ultima, "a
 LAST_N = 50  # Numero di epoche finali per la media
 # Cartelle base
 BASE_DIR = "Models"
-OUTPUT_DIR = "output"
+OUTPUT_DIR = "output/ComplexityAnalysis"
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Decidi se continuare o nuova run
