@@ -100,13 +100,15 @@ def evaluate_one_model(
     hidden_activation_name: str,
     save_plot: bool,
     layout_out_dir: str,
-) -> float:
+):
     """
     Load one model, predict on [-1,1], compute MSE vs true Runge,
-    and optionally save a plot to the layout-specific directory.
-    Returns the MSE.
+    and optionally save a per-activation plot to the layout-specific directory.
 
-    Raises FileNotFoundError if model_path doesn't exist.
+    Returns:
+        mse (float), X_eval (ndarray shape [N,1]), y_pred (ndarray shape [N,1])
+    Raises:
+        FileNotFoundError if model_path doesn't exist.
     """
     hidden_act = get_activation_function(hidden_activation_name)
     dims = [1] + [width] * n_hidden + [1]
@@ -128,7 +130,7 @@ def evaluate_one_model(
     y_pred = net.predict(X_eval)
     mse = float(np.mean((y_pred - y_true) ** 2))
 
-    # Plot
+    # Per-activation plot
     plt.figure(figsize=(8, 6))
     plt.plot(X_REF, Y_REF_NOISY, label="Noisy sample", linewidth=1, alpha=0.7)
     plt.plot(X_eval, y_true, label="True Runge", linewidth=2)
@@ -149,7 +151,7 @@ def evaluate_one_model(
         plt.show()
 
     plt.close()
-    return mse
+    return mse, X_eval, y_pred
 
 # -----------------------------
 # Batch runner (run + layout)
@@ -169,7 +171,14 @@ def evaluate_all_activations_for_layout(
         base_plot_dir/<run_name>/hidden<N>_width<W>/
 
     Missing models are skipped without raising.
-    Returns a dict: activation -> {"mse": float, "model_path": str}
+
+    Returns:
+        results dict: activation -> {
+            "mse": float,
+            "model_path": str,
+            "X_eval": ndarray,
+            "y_pred": ndarray
+        }
     """
     if activations is None:
         activations = ["RELU", "LRELU", "tanh", "sigmoid"]
@@ -191,7 +200,7 @@ def evaluate_all_activations_for_layout(
         model_path = os.path.join(run_dir, fname)
 
         try:
-            mse = evaluate_one_model(
+            mse, X_eval, y_pred = evaluate_one_model(
                 model_path=model_path,
                 n_hidden=n_hidden,
                 width=width,
@@ -199,7 +208,12 @@ def evaluate_all_activations_for_layout(
                 save_plot=save_plot,
                 layout_out_dir=layout_out_dir,
             )
-            results[act] = {"mse": mse, "model_path": model_path}
+            results[act] = {
+                "mse": mse,
+                "model_path": model_path,
+                "X_eval": X_eval,
+                "y_pred": y_pred,
+            }
             print(f"[OK]   {act:<8} MSE={mse:.6e}")
         except FileNotFoundError:
             print(f"[Skip] {act:<8} (file not found)")
@@ -210,6 +224,7 @@ def evaluate_all_activations_for_layout(
             # Any other error (shape mismatch, etc.) -> skip
             print(f"[Skip] {act:<8} (error: {type(e).__name__}: {e})")
 
+    # Write CSV summary
     if save_csv and results:
         csv_path = os.path.join(layout_out_dir, "summary.csv")
         with open(csv_path, "w", newline="") as f:
@@ -219,8 +234,46 @@ def evaluate_all_activations_for_layout(
                 writer.writerow([act, f"{info['mse']:.8f}", info["model_path"]])
         print(f"[Saved] summary CSV -> {csv_path}")
 
-    if not results:
-        print("[Info] No models were evaluated (all missing or errored).")
+    # Unified overlay plot with all available predictions
+    if results:
+        # Use X from any entry (all identical)
+        any_key = next(iter(results.keys()))
+        X_overlay = results[any_key]["X_eval"]
+        y_true = runge_true(X_overlay)
+
+        plt.figure(figsize=(10, 7))
+        # Noisy and clean references
+        plt.plot(X_REF, Y_REF_NOISY, label="Noisy sample", linewidth=1, alpha=0.7)
+        plt.plot(X_overlay, y_true, label="True Runge", linewidth=2)
+
+        # Plot each activation's prediction; sort legend by MSE
+        for act, info in sorted(results.items(), key=lambda kv: kv[1]["mse"]):
+            y_pred = info["y_pred"]
+            mse = info["mse"]
+            plt.plot(
+                X_overlay,
+                y_pred,
+                linestyle="--",
+                linewidth=2,
+                label=f"{act} (MSE {mse:.3e})",
+            )
+
+        plt.title(f"Overlay predictions — run '{os.path.basename(os.path.normpath(run_dir))}'\n"
+                  f"layout: hidden{n_hidden}, width={width}")
+        plt.xlabel("x")
+        plt.ylabel("y")
+        plt.legend()
+        plt.grid(True)
+
+        overlay_png = os.path.join(layout_out_dir, "overlay_predictions.png")
+        overlay_pdf = os.path.join(layout_out_dir, "overlay_predictions.pdf")
+        plt.savefig(overlay_png, dpi=150, bbox_inches="tight")
+        plt.savefig(overlay_pdf, bbox_inches="tight")
+        plt.close()
+        print(f"[Saved] overlay plot -> {overlay_png}")
+        print(f"[Saved] overlay plot -> {overlay_pdf}")
+    else:
+        print("[Info] No models were evaluated (overlay not created).")
 
     return results
 
