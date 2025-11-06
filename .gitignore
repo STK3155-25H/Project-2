@@ -543,3 +543,4 @@ Code/exported_cb
 # Export codebase artifacts
 codeexport.config.psd1
 codebase.txt
+Code/.minst_cache
