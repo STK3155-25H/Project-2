@@ -86,13 +86,13 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
     x = np.linspace(-1, 1, best_n)
     y = runge_function(x, noise=noise)
 
-    # Split & scale (si assume che split_scale ritorni già x_train/x_test e y_train/y_test nelle corrette scale)
+    # Split & scale (it's assumed split_scale already returns x_train/x_test and y_train/y_test in the correct scales)
     x_train, x_test, y_train, y_test = split_scale(x, y, random_state=seed + r)
 
     # -------------------
     # OLS part
     # -------------------
-    # Costruzione feature polinomiali + scaling colonne (basato sul train)
+    # Polynomial  feature construction + column scaling (based on train)
     X_train, col_means, col_stds = polynomial_features_scaled(
         x_train.flatten(), best_degree, return_stats=True
     )
@@ -134,15 +134,15 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
         t_val=y_test.reshape(-1, 1)
     )
 
-    # Salvataggio learning curves
-    # (ci si aspetta che scores contenga "train_errors" e "val_errors" di lunghezza = epochs)
+    # Saving learning curves
+    # (it's expected that scores contains "train_errors" and "val_errors" of length = epochs)
     tr = np.asarray(scores.get("train_errors", []), dtype=float).reshape(-1)
     vl = np.asarray(scores.get("val_errors",   []), dtype=float).reshape(-1)
     L = min(len(tr), epochs)
     train_losses[:L, r] = tr[:L]
     val_losses[:L, r]   = vl[:L]
 
-    # Predizioni
+    # Predictions
     y_train_pred_nn = nn.predict(x_train.reshape(-1, 1)).reshape(-1)
     y_test_pred_nn  = nn.predict(x_test.reshape(-1, 1)).reshape(-1)
 
@@ -151,7 +151,7 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
     R2_train_runs_nn[r]  = R2_score(y_train, y_train_pred_nn)
     R2_test_runs_nn[r]   = R2_score(y_test,  y_test_pred_nn)
 
-    # Salvataggio per l'ultimo run (plot)
+    # Saving for the last run (plot)
     if r == N_RUNS - 1:
         x_plot     = x_test.copy()
         y_plot     = y_test.copy()
@@ -159,7 +159,7 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
         y_nn_plot  = y_test_pred_nn.copy()
 
 # -----------------------------
-# Aggregazione metriche
+# Metrics aggregation
 # -----------------------------
 def mean_std(a):
     return float(np.nanmean(a)), float(np.nanstd(a, ddof=1))
@@ -174,14 +174,14 @@ mse_test_nn,  mse_test_std_nn  = mean_std(mse_test_runs_nn)
 R2_train_nn,  R2_train_std_nn  = mean_std(R2_train_runs_nn)
 R2_test_nn,   R2_test_std_nn   = mean_std(R2_test_runs_nn)
 
-# Learning curves medie (+ std)
+# Learning curves averages (+ std)
 avg_train_loss = np.nanmean(train_losses, axis=1)
 avg_val_loss   = np.nanmean(val_losses,   axis=1)
 std_train_loss = np.nanstd(train_losses,  axis=1, ddof=1)
 std_val_loss   = np.nanstd(val_losses,    axis=1, ddof=1)
 
 # -----------------------------
-# Print risultati in console
+# Print results in console
 # -----------------------------
 print("\nOLS Results:")
 print(f"Train MSE: {mse_train_ols:.4f} ± {mse_train_std_ols:.4f}")
@@ -196,7 +196,7 @@ print(f"Train  R2: {R2_train_nn:.4f} ± {R2_train_std_nn:.4f}")
 print(f"Test   R2: {R2_test_nn:.4f} ± {R2_test_std_nn:.4f}")
 
 # -----------------------------
-# Salvataggi tabelle
+# Tables saving
 # -----------------------------
 summary = pd.DataFrame({
     "model": ["OLS", "FFNN"],
@@ -236,7 +236,7 @@ plt.savefig(FIG / "ffnn_loss_epochs.png", dpi=150)
 plt.close(fig)
 
 # Plot 2: Runge function fits from last run on test set
-# (FIX: forza 1D per evitare fancy indexing (n,1,1))
+# (FIX: forces 1D to avoid fancy indexing (n,1,1))
 if x_plot is not None:
     x1d   = np.asarray(x_plot).reshape(-1)
     y1d   = np.asarray(y_plot).reshape(-1)
@@ -261,9 +261,9 @@ if x_plot is not None:
     plt.savefig(FIG / "runge_fits_test.png", dpi=150)
     plt.close(fig)
 
-# (Opzionale) True function su griglia densa — solo come riferimento visuale
-# ATTENZIONE: se split_scale scala/centra x e y, questa curva NON è direttamente comparabile
-# con le predizioni (che sono nello spazio scalato/centrato). La lasciamo come figura separata.
+# (Optional) True function on dense grid — just as a visual reference
+# ATTENTION: if split_scale scales/centers x and y, this curve IS NOT directly comparable
+# with the predictions (that are in scaled/centered space). We leave it as a separate figure.
 dense_x = np.linspace(-1, 1, 1000)
 y_true_dense = runge_function(dense_x, noise=False)
 fig, ax = plt.subplots(figsize=(8, 6))
@@ -279,4 +279,4 @@ plt.close(fig)
 print(f"\nPart B done. Aggregated over {N_RUNS} runs.")
 print(f"Figures -> {FIG}")
 print(f"Tables  -> {TAB}")
-print("Note: run Part A first and load the actual best (n, degree) from CSV quando disponibile.")
+print("Note: run Part A first and load the actual best (n, degree) from CSV when available.")

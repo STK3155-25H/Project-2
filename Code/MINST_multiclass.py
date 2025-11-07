@@ -17,7 +17,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import OneHotEncoder
 
-# === tuoi moduli ===
+# === your modules ===
 from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.activation_functions import RELU, softmax
@@ -54,7 +54,7 @@ def load_state(cache):
 # Data loading
 # ============================================================
 def load_mnist():
-    print("🔄 Fetching MNIST from OpenML (cached automatically)...")
+    print("Fetching MNIST from OpenML (cached automatically)...")
     X, y = fetch_openml("mnist_784", version=1, as_frame=False, return_X_y=True)
 
     X = X.astype(np.float64) / 255.0
@@ -118,18 +118,18 @@ def plot_misclassified(X, y_true, y_pred, outdir: Path, max_show=25):
     import math
     wrong_idx = np.where(y_pred != y_true)[0]
     if wrong_idx.size == 0:
-        print("✅ Nessuna immagine misclassificata!")
+        print("No picture was misclassified!")
         return
 
-    # seleziona al massimo max_show esempi
+    # select maximum max_show examples
     n = int(min(max_show, wrong_idx.size))
     idx = wrong_idx[:n]
 
-    # griglia
+    # grid
     cols = 5
     rows = math.ceil(n / cols)
 
-    # figsize proporzionale per dare spazio ai titoli
+    # figsize proportional to give space to titles
     fig_w = cols * 2.2
     fig_h = rows * 2.8
     fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h), constrained_layout=False)
@@ -144,18 +144,18 @@ def plot_misclassified(X, y_true, y_pred, outdir: Path, max_show=25):
             ax.imshow(img, cmap="gray", interpolation="nearest")
             ax.set_xticks([])
             ax.set_yticks([])
-            # Titolo con padding + fondino bianco per non "invadere" il subplot sotto
+            # Title with padding + white margin to avoid overlapping with subplot under
             ax.set_title(
                 f"T:{y_true[idx[i]]}  P:{y_pred[idx[i]]}",
                 fontsize=9,
-                pad=8,  # spazio extra sopra l'immagine
+                pad=8,  # extra space over the picture
                 bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2),
             )
         else:
             ax.axis("off")
 
     fig.suptitle("Esempi Misclassificati — FFNN MNIST", fontsize=12, y=0.995)
-    # Aumenta lo spazio verticale tra subplot per evitare overlap dei titoli
+    # Add vertical space between subplots to avoid titles overlap
     fig.subplots_adjust(top=0.92, hspace=0.6, wspace=0.15)
 
     outpath = outdir / "misclassified_examples.png"
@@ -189,7 +189,7 @@ def train_or_resume(
 
     # Resume if cache exists
     if weights_file.exists():
-        print("🔁 Resuming from checkpoint…")
+        print("Resuming from checkpoint…")
         model.load_weights(str(weights_file))
 
     scheduler = Adam(eta=eta, rho=0.9, rho2=0.999)
@@ -198,7 +198,7 @@ def train_or_resume(
 
     try:
         for epoch in range(start_epoch, epochs):
-            print(f"\n📘 Epoch {epoch+1}/{epochs}")
+            print(f"\n Epoch {epoch+1}/{epochs}")
 
             scores = model.fit(
                 X_train, t_train,
@@ -217,17 +217,17 @@ def train_or_resume(
             save_state(cache, {"epoch_completed": epoch + 1})
 
     except KeyboardInterrupt:
-        print("\n✋ Training interrupted — checkpoint saved.")
+        print("\n Training interrupted — checkpoint saved.")
         return
 
-    print("\n✅ Training finished!")
+    print("\nTraining finished!")
 
     # ============================================================
     # Final evaluation + plots
     # ============================================================
-    print("\n📊 Evaluating model…")
+    print("\nEvaluating model…")
     test_acc, y_pred = accuracy_argmax(model, X_test, y_test_i)
-    print(f"➡️ Test accuracy (argmax): {test_acc:.4f}")
+    print(f"Test accuracy (argmax): {test_acc:.4f}")
 
     results_dir = Path("output/MINST/mnist_ffnn_results")
     ensure_dir(results_dir)
@@ -236,7 +236,7 @@ def train_or_resume(
     plot_confusion(y_test_i, y_pred, results_dir)
     plot_misclassified(X_test, y_test_i, y_pred, results_dir)
 
-    print("\n🖼 Figures saved in: ./mnist_ffnn_results/")
+    print("\nFigures saved in: ./mnist_ffnn_results/")
     print("   - learning_curves.png")
     print("   - confusion_matrix.png")
     print("   - misclassified_examples.png")
