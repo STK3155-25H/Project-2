@@ -7,33 +7,33 @@ import matplotlib.pyplot as plt
 
 def main(csv_path: str = "data.csv", out_path: str | None = None):
     if not os.path.isfile(csv_path):
-        raise FileNotFoundError(f"File non trovato: {csv_path}")
+        raise FileNotFoundError(f"File not found: {csv_path}")
 
-    # ---- Caricamento dati ----
+    # ---- Data loading ----
     df = pd.read_csv(csv_path)
 
-    # Prima colonna = numero di hidden layers (etichette assi Y)
+    # First column = number of hidden layers (labels Y axes)
     y_labels = df.iloc[:, 0].tolist()
 
-    # Header dalla seconda colonna in poi = unità per layer (etichette asse X)
-    # Provo a convertirle in numeri per ordinare correttamente
+    # Header from second column = unit per layer (labels X axes)
+    # Try to convert to numbers to sort correctly
     x_raw = list(df.columns[1:])
     try:
         x_labels = [int(float(x)) for x in x_raw]
     except ValueError:
-        # Se non sono numeriche, le lascio come stringhe
+        # If not numeric, leave strings
         x_labels = x_raw
 
-    # Ordino le colonne numeriche (se possibile) per avere X crescente
+    # Sort numeric columns (if possible) to have ascending X 
     order_idx = np.argsort(x_labels) if all(isinstance(x, int) for x in x_labels) else np.arange(len(x_labels))
     x_labels_sorted = [x_labels[i] for i in order_idx]
 
     data = df.iloc[:, 1:].to_numpy(dtype=float)
-    data = data[:, order_idx]  # riordina le colonne
+    data = data[:, order_idx]  # sorts columns
 
     # ---- Plot heatmap ----
     fig, ax = plt.subplots(figsize=(10, 5))
-    im = ax.imshow(data, aspect="auto", vmin= 0.00000000000000001, vmax=0.005)  # usa la colormap di default
+    im = ax.imshow(data, aspect="auto", vmin= 0.00000000000000001, vmax=0.005)  # uses default colormap 
 
     # Tick & label
     ax.set_xticks(np.arange(len(x_labels_sorted)))
@@ -41,23 +41,23 @@ def main(csv_path: str = "data.csv", out_path: str | None = None):
     ax.set_yticks(np.arange(len(y_labels)))
     ax.set_yticklabels(y_labels)
 
-    ax.set_xlabel("Unità per hidden layer")
-    ax.set_ylabel("Numero di hidden layers")
+    ax.set_xlabel("Units per hidden layer")
+    ax.set_ylabel("Number of hidden layers")
     ax.set_title("Heatmap (es. validation loss per layout)")
 
-    # Barra colori
+    # Colorbar
     cbar = fig.colorbar(im, ax=ax)
-    cbar.set_label("Valore")
+    cbar.set_label("Value")
 
     fig.tight_layout()
 
-    # Salvataggio
+    # Saving
     if out_path is None:
         base = os.path.splitext(os.path.basename(csv_path))[0]
         out_path = f"{base}_heatmap.png"
 
     plt.savefig(out_path, dpi=200)
-    print(f"Heatmap salvata in: {out_path}")
+    print(f"Heatmap saved in: {out_path}")
 
 if __name__ == "__main__":
     csv = sys.argv[1] if len(sys.argv) > 1 else "output/run_20251105_110618/val_loss_data_clean_RELU.csv"

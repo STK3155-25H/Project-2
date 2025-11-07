@@ -83,7 +83,7 @@ def has_incomplete_work(run_dir, output_base, activation_names):
 class MLP(nn.Module):
     def __init__(self, layout, act_name):
         super().__init__()
-        # Map to match your old names for filenames
+        # Map to match old names for filenames
         # LRELU -> LeakyReLU, RELU -> ReLU, tanh -> Tanh, sigmoid -> Sigmoid
         act_map = {
             "LRELU": nn.LeakyReLU(negative_slope=0.01),
