@@ -546,3 +546,4 @@ codebase.txt
 Code/.minst_cache
 
 .python-version
+*.done
