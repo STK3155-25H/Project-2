@@ -342,7 +342,7 @@ def parse_args():
     p.add_argument("--avg-last-n", type=int, default=50)
     p.add_argument("--n-samples", type=int, default=200)
     p.add_argument("--val-frac", type=float, default=0.2)
-    p.add_argument("--batches-sgd", type=int, default=30)
+    p.add_argument("--batches-sgd", type=int, default=60)
     p.add_argument("--lam-l1", type=float, default=0.0)
     p.add_argument("--lam-l2", type=float, default=0.0)
     p.add_argument("--methods", type=str, nargs="*", default=[
