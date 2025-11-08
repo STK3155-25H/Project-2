@@ -1,0 +1,38 @@
+{
+  "methods": [
+    "constant",
+    "momentum",
+    "adagrad",
+    "adagradmomentum",
+    "rmsprop",
+    "adam"
+  ],
+  "etas": [
+    0.0001,
+    0.0003,
+    0.001,
+    0.003,
+    0.01,
+    0.03
+  ],
+  "seeds": [
+    42,
+    1337,
+    31415
+  ],
+  "epochs": 400,
+  "batches_sgd": 10,
+  "lam_l1": 0.0,
+  "lam_l2": 0.0,
+  "n_samples": 1200,
+  "noise_std": 0.03,
+  "val_frac": 0.2,
+  "avg_last_n": 50,
+  "arch": [
+    1,
+    64,
+    64,
+    1
+  ],
+  "timestamp": "2025-11-08T01:00:52.260714"
+}

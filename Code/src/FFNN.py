@@ -268,151 +268,125 @@ class FFNN:
         # return predict
         
     def reset_weights(self):
-        """
-        Description:
-        ------------
-            Resets/Reinitializes the weights in order to train the network for a new problem.
-
-        """
         if self.seed is not None:
             np.random.seed(self.seed)
-
-        self.weights = list()
+        self.weights = []
         for i in range(len(self.dimensions) - 1):
-            weight_array = np.random.randn(
-                self.dimensions[i] + 1, self.dimensions[i + 1]
-            )
-            weight_array[0, :] = np.random.randn(self.dimensions[i + 1]) * 0.01
+            fan_in = self.dimensions[i]
+            out = self.dimensions[i + 1]
+            # bias riga
+            b = np.random.randn(1, out) * 0.01
+            # He init per ReLU
+            W = np.random.randn(fan_in, out) * np.sqrt(2.0 / fan_in)
+            self.weights.append(np.vstack([b, W]))
 
-            self.weights.append(weight_array)
 
     def _feedforward(self, X: np.ndarray):
         """
-        Description:
-        ------------
-            Calculates the activation of each layer starting at the input and ending at the output.
-            Each following activation is calculated from a weighted sum of each of the preceeding
-            activations (except in the case of the input layer).
-
-        Parameters:
-        ------------
-            I   X (np.ndarray): The design matrix, with n rows of p features each
-
-        Returns:
-        ------------
-            I   z (np.ndarray): A prediction vector (row) for each row in our design matrix
+        Forward pass con guard-rail per valori non finiti nelle attivazioni.
         """
-
-        # reset matrices
-        self.a_matrices = list()
-        self.z_matrices = list()
-
-        # if X is just a vector, make it into a matrix
+        # reset
+        self.a_matrices = []
+        self.z_matrices = []
+    
+        # vettore -> matrice
         if len(X.shape) == 1:
             X = X.reshape((1, X.shape[0]))
-
-        # Add a coloumn of zeros as the first coloumn of the design matrix, in order
-        # to add bias to our data
+    
+        # bias iniziale
         bias = np.ones((X.shape[0], 1)) * 0.01
         X = np.hstack([bias, X])
-
-        # a^0, the nodes in the input layer (one a^0 for each row in X - where the
-        # exponent indicates layer number).
+    
         a = X
         self.a_matrices.append(a)
         self.z_matrices.append(a)
-
-        # The feed forward algorithm
+    
         for i in range(len(self.weights)):
             if i < len(self.weights) - 1:
                 z = a @ self.weights[i]
                 self.z_matrices.append(z)
+    
                 a = self.hidden_func(z)
-                # bias column again added to the data here
+    
+                # ---- guard-rail su attivazioni ----
+                if not np.all(np.isfinite(a)):
+                    a = np.nan_to_num(a, nan=0.0, posinf=1e6, neginf=-1e6)
+                # -----------------------------------
+    
                 bias = np.ones((a.shape[0], 1)) * 0.01
                 a = np.hstack([bias, a])
                 self.a_matrices.append(a)
             else:
                 try:
-                    # a^L, the nodes in our output layers
                     z = a @ self.weights[i]
                     a = self.output_func(z)
+    
+                    # ---- guard-rail anche sull'output ----
+                    if not np.all(np.isfinite(a)):
+                        a = np.nan_to_num(a, nan=0.0, posinf=1e6, neginf=-1e6)
+                    # --------------------------------------
+    
                     self.a_matrices.append(a)
                     self.z_matrices.append(z)
                 except Exception as OverflowError:
                     print(
-                        "OverflowError in fit() in FFNN\nHOW TO DEBUG ERROR: Consider lowering your learning rate or scheduler specific parameters such as momentum, or check if your input values need scaling"
+                        "OverflowError in fit() in FFNN\n"
+                        "Suggerimenti: riduci learning rate/parametri dello scheduler,"
+                        " o scala meglio gli input/target"
                     )
-
-        # this will be a^L
+    
         return a
-
+    
     def _backpropagate(self, X, t, lam_l1, lam_l2):
         """
-        Description:
-        ------------
-            Performs the backpropagation algorithm. In other words, this method
-            calculates the gradient of all the layers starting at the
-            output layer, and moving from right to left accumulates the gradient until
-            the input layer is reached. Each layers respective weights are updated while
-            the algorithm propagates backwards from the output layer (auto-differentation in reverse mode).
-
-        Parameters:
-        ------------
-            I   X (np.ndarray): The design matrix, with n rows of p features each.
-            II  t (np.ndarray): The target vector, with n rows of p targets.
-            III lam_l1 (float): L1 regularization parameter
-            IV  lam_l2 (float): L2 regularization parameter
-
-        Returns:
-        ------------
-            No return value.
-
+        Backpropagation con gradient clipping a norma globale.
         """
         out_derivative = derivate(self.output_func)
         hidden_derivative = derivate(self.hidden_func)
 
+        # ---- helper: global-norm clipping ----
+        def clip_by_global_norm(G, max_norm=1e3):
+            n = np.linalg.norm(G)
+            if np.isfinite(n) and n > max_norm:
+                G *= (max_norm / (n + 1e-12))
+            return G
+        # --------------------------------------
+
         for i in range(len(self.weights) - 1, -1, -1):
-            # delta terms for output
+            # delta terms per l'output
             if i == len(self.weights) - 1:
-                # for multi-class classification
-                if (
-                    self.output_func.__name__ == "softmax"
-                ):
+                # multi-class (softmax + CE)
+                if self.output_func.__name__ == "softmax":
                     delta_matrix = self.a_matrices[i + 1] - t
-                # for single class classification
                 else:
                     cost_func_derivative = grad(self.cost_func(t))
-                    delta_matrix = out_derivative(
-                        self.z_matrices[i + 1]
-                    ) * cost_func_derivative(self.a_matrices[i + 1])
-
-            # delta terms for hidden layer
+                    delta_matrix = out_derivative(self.z_matrices[i + 1]) * cost_func_derivative(self.a_matrices[i + 1])
+            # delta per layer nascosti
             else:
-                delta_matrix = (
-                    self.weights[i + 1][1:, :] @ delta_matrix.T
-                ).T * hidden_derivative(self.z_matrices[i + 1])
+                delta_matrix = (self.weights[i + 1][1:, :] @ delta_matrix.T).T * hidden_derivative(self.z_matrices[i + 1])
 
-            # calculate gradient
+            # gradienti (senza bias nella parte "weights")
             gradient_weights = self.a_matrices[i][:, 1:].T @ delta_matrix
-            gradient_bias = np.sum(delta_matrix, axis=0).reshape(
-                1, delta_matrix.shape[1]
-            )
+            gradient_bias    = np.sum(delta_matrix, axis=0).reshape(1, delta_matrix.shape[1])
 
-            # regularization terms
+            # regolarizzazione
             gradient_weights += lam_l2 * self.weights[i][1:, :]
             gradient_weights += lam_l1 * np.sign(self.weights[i][1:, :])
 
-            # use scheduler
-            update_matrix = np.vstack(
-                [
-                    self.schedulers_bias[i].update_change(gradient_bias),
-                    self.schedulers_weight[i].update_change(gradient_weights),
-                ]
-            )
+            # ---- CLIPPING (applica prima dello scheduler) ----
+            gradient_weights = clip_by_global_norm(gradient_weights, max_norm=1e3)
+            gradient_bias    = clip_by_global_norm(gradient_bias,    max_norm=1e3)
+            # --------------------------------------------------
 
-            # update weights and bias
+            # scheduler
+            update_matrix = np.vstack([
+                self.schedulers_bias[i].update_change(gradient_bias),
+                self.schedulers_weight[i].update_change(gradient_weights),
+            ])
+
+            # update pesi
             self.weights[i] -= update_matrix
+
 
     def _accuracy(self, prediction: np.ndarray, target: np.ndarray):
         """

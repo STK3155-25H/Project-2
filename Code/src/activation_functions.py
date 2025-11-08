@@ -9,6 +9,8 @@ def sigmoid(X):
     try:
         return 1.0 / (1 + np.exp(-X))
     except FloatingPointError:
+        print("Porcazzocccooallaalaaaa")
+        print(X)
         return np.where(X > np.zeros(X.shape), np.ones(X.shape), np.zeros(X.shape))
 
 
@@ -52,11 +54,10 @@ def derivate(func):
             return s * (1 - s)
         return dfunc
 
-    # if func.__name__ == "tanh":
-    #     def dfunc(X):
-    #         s = func(X)
-    #         return s * (1 - s)
-    #     return dfunc
-
+    elif func.__name__ == "tanh":
+        def dfunc(X):
+            t = np.tanh(X)
+            return 1 - t * t
+        return dfunc
     else:
         return elementwise_grad(func)
