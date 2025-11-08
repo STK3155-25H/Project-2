@@ -544,3 +544,5 @@ Code/exported_cb
 codeexport.config.psd1
 codebase.txt
 Code/.minst_cache
+
+.python-version
