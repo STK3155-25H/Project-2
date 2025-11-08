@@ -1,4 +1,0 @@
-activation,mse,model_path
-LRELU,0.00090906,Models/run_20251105_110618/model_hidden_3_width_30_act_LRELU.npz
-sigmoid,0.00123215,Models/run_20251105_110618/model_hidden_3_width_30_act_sigmoid.npz
-RELU,0.00128442,Models/run_20251105_110618/model_hidden_3_width_30_act_RELU.npz
