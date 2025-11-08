@@ -1,0 +1,30 @@
+{
+    "SEED": 314,
+    "epochs": 50,
+    "lr": 0.001,
+    "lam_l1": 0.0,
+    "lam_l2": 0.0,
+    "rho": 0.9,
+    "rho2": 0.999,
+    "batches": 128,
+    "activation_funcs": [
+        "RELU",
+        "LRELU"
+    ],
+    "n_hidden_list": [
+        1,
+        2,
+        3,
+        4,
+        5
+    ],
+    "n_perceptrons_list": [
+        32,
+        64,
+        128,
+        256,
+        512
+    ],
+    "VAL_LOSS_MODE": "avg_last_n",
+    "LAST_N": 10
+}

@@ -1,284 +1,195 @@
-"""
-mnist_trainer.py
-MNIST multiclass FFNN + resume + checkpoint + scientific plots
-"""
-
 from __future__ import annotations
 import os
 import json
-from pathlib import Path
-import time
-from typing import Dict, Tuple
-
-import autograd.numpy as np
+from datetime import datetime
+import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.datasets import fetch_openml
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
-from sklearn.preprocessing import OneHotEncoder
 
-# === tuoi moduli ===
 from src.FFNN import FFNN
 from src.scheduler import Adam
-from src.activation_functions import RELU, softmax, LRELU
 from src.cost_functions import CostCrossEntropy
+from src.activation_functions import LRELU, RELU, softmax
 
+# -------------------- ACT FUNCS MAP --------------------
+act_func_map = {
+    'LRELU': LRELU,
+    'RELU': RELU
+}
 
-# ============================================================
-# Utility helpers
-# ============================================================
-def one_hot(y, n_classes):
-    enc = OneHotEncoder(sparse_output=False, categories=[np.arange(n_classes)])
-    return enc.fit_transform(y.reshape(-1, 1))
+# -------------------- UTILITIES --------------------
+def build_layout_mnist(n_hidden: int, width: int):
+    """Input 784, output 10 classi"""
+    if n_hidden <= 0:
+        return [784, 10]
+    return [784] + [width]*n_hidden + [10]
 
+def extract_val_metrics(history: dict, net: FFNN, X_val, y_val, mode="avg_last_n", last_n=10):
+    """Return validation loss and accuracy"""
+    y_pred = net.predict(X_val)
+    val_loss = float(CostCrossEntropy(y_val)(y_pred))
+    pred_labels = np.argmax(y_pred, axis=1)
+    true_labels = np.argmax(y_val, axis=1)
+    val_acc = np.mean(pred_labels == true_labels)
 
-def ensure_dir(path: Path):
-    path.mkdir(parents=True, exist_ok=True)
+    # Fallback su history
+    val_losses_hist = history.get("val_loss", history.get("val_errors"))
+    if val_losses_hist is not None and len(val_losses_hist) > 0:
+        if mode == "min":
+            val_loss = float(np.nanmin(val_losses_hist))
+        elif mode == "final":
+            val_loss = float(val_losses_hist[-1])
+        elif mode == "avg_last_n":
+            val_loss = float(np.mean(val_losses_hist[-last_n:]))
+    return val_loss, val_acc
 
+# -------------------- PATHS --------------------
+BASE_DIR = "Models_MNIST"
+OUTPUT_DIR = "output/MNIST_ComplexityAnalysis"
+os.makedirs(BASE_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-def save_state(cache, state_dict):
-    ensure_dir(cache)
-    with open(cache / "state.json", "w") as f:
-        json.dump(state_dict, f, indent=2)
+def start_new_run(base_dir=BASE_DIR, output_dir=OUTPUT_DIR):
+    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
+    run_dir = f"run_{current_time}"
+    os.makedirs(os.path.join(base_dir, run_dir), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, run_dir), exist_ok=True)
+    return run_dir
 
+# -------------------- PARAMETERS --------------------
+SEED = 314
+np.random.seed(SEED)
+epochs = 50
+lr = 0.001
+lam_l1 = 0.0
+lam_l2 = 0.0
+rho = 0.9
+rho2 = 0.999
+batches = 128
 
-def load_state(cache):
-    state_path = cache / "state.json"
-    if not state_path.exists():
-        return None
-    with open(state_path, "r") as f:
-        return json.load(f)
+activation_funcs = [RELU, LRELU]
+n_hidden_list = [1,2,3,4,5]
+n_perceptrons_list = [32,64,128,256,512]
+VAL_LOSS_MODE = "avg_last_n"
+LAST_N = 10
 
-
-# ============================================================
-# Data loading
-# ============================================================
+# -------------------- LOAD MNIST --------------------
 def load_mnist():
     print("🔄 Fetching MNIST from OpenML (cached automatically)...")
     X, y = fetch_openml("mnist_784", version=1, as_frame=False, return_X_y=True)
-
     X = X.astype(np.float64) / 255.0
     y = y.astype(np.int64)
-
+    y_onehot = np.eye(10)[y]
     return train_test_split(
-        X, y, test_size=0.2, random_state=123, stratify=y
+        X, y_onehot, test_size=0.2, random_state=SEED, stratify=y
     )
 
+X_train, X_val, y_train, y_val = load_mnist()
 
-# ============================================================
-# Model building
-# ============================================================
-architectures = {
-    "small": [784, 64, 10],
-    "medium": [784, 128, 64, 10],
-    "large": [784, 256, 128, 10]
+# -------------------- START RUN --------------------
+run_dir = start_new_run(BASE_DIR, OUTPUT_DIR)
+
+# Salva config
+config = {
+    'SEED': SEED,
+    'epochs': epochs,
+    'lr': lr,
+    'lam_l1': lam_l1,
+    'lam_l2': lam_l2,
+    'rho': rho,
+    'rho2': rho2,
+    'batches': batches,
+    'activation_funcs': [f.__name__ for f in activation_funcs],
+    'n_hidden_list': n_hidden_list,
+    'n_perceptrons_list': n_perceptrons_list,
+    'VAL_LOSS_MODE': VAL_LOSS_MODE,
+    'LAST_N': LAST_N
 }
+with open(os.path.join(BASE_DIR, run_dir, "config.json"), 'w') as f:
+    json.dump(config, f, indent=4)
 
-activations = {
-    "RELU": RELU,
-    "LeakyRELU": LRELU  
-}
+# -------------------- LOOP ACTIVATIONS --------------------
+for act in activation_funcs:
+    heat_loss = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan)
+    heat_acc  = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan)
 
-def build_model(layout, act_function, seed=None):
-    model = FFNN(
-        dimensions=layout,
-        hidden_func=act_function,
-        output_func=softmax,
-        cost_func=CostCrossEntropy,
-        seed=seed,
-    )
-    return model
+    for i_h, n_hidden in enumerate(n_hidden_list):
+        for j_w, width in enumerate(n_perceptrons_list):
+            layout = build_layout_mnist(n_hidden, width)
+            model_filename = f"model_hidden_{n_hidden}_width_{width}_act_{act.__name__}.npz"
+            model_path = os.path.join(BASE_DIR, run_dir, model_filename)
+            done_marker = model_path + ".done"
 
+            if os.path.exists(done_marker):
+                print(f"{model_filename} already done. Skipping.")
+                continue
 
-def accuracy_argmax(model, X, y_true):
-    probs = model.predict_proba(X)
-    y_pred = np.argmax(probs, axis=1)
-    return float(np.mean(y_pred == y_true)), y_pred
-
-
-# ============================================================
-# Plotting section (scientific visuals)
-# ============================================================
-def plot_learning_curves(history, outdir: Path):
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(history["train_errors"], label="Train loss", lw=2)
-    plt.plot(history["val_errors"], label="Val loss", lw=2)
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss (Cross Entropy)")
-    plt.title("Learning Curve — Loss")
-    plt.grid(alpha=0.3)
-    plt.legend()
-    plt.savefig(outdir / "learning_curves.png", dpi=220)
-    plt.close()
-
-
-def plot_confusion(y_true, y_pred, outdir: Path):
-    cm = confusion_matrix(y_true, y_pred)
-
-    plt.figure(figsize=(8, 7))
-    plt.imshow(cm, cmap="viridis")
-    plt.title("Confusion Matrix — MNIST")
-    plt.ylabel("True label")
-    plt.xlabel("Predicted label")
-    plt.colorbar()
-    plt.savefig(outdir / "confusion_matrix.png", dpi=220)
-    plt.close()
-
-def plot_misclassified(X, y_true, y_pred, outdir: Path, max_show=25):
-    import math
-    wrong_idx = np.where(y_pred != y_true)[0]
-    if wrong_idx.size == 0:
-        print("✅ Nessuna immagine misclassificata!")
-        return
-
-    # seleziona al massimo max_show esempi
-    n = int(min(max_show, wrong_idx.size))
-    idx = wrong_idx[:n]
-
-    # griglia
-    cols = 5
-    rows = math.ceil(n / cols)
-
-    # figsize proporzionale per dare spazio ai titoli
-    fig_w = cols * 2.2
-    fig_h = rows * 2.8
-    fig, axes = plt.subplots(rows, cols, figsize=(fig_w, fig_h), constrained_layout=False)
-    if rows == 1 and cols == 1:
-        axes = np.array([axes])
-    axes = axes.ravel()
-
-    for i in range(rows * cols):
-        ax = axes[i]
-        if i < n:
-            img = X[idx[i]].reshape(28, 28)
-            ax.imshow(img, cmap="gray", interpolation="nearest")
-            ax.set_xticks([])
-            ax.set_yticks([])
-            # Titolo con padding + fondino bianco per non "invadere" il subplot sotto
-            ax.set_title(
-                f"T:{y_true[idx[i]]}  P:{y_pred[idx[i]]}",
-                fontsize=9,
-                pad=8,  # spazio extra sopra l'immagine
-                bbox=dict(facecolor="white", alpha=0.8, edgecolor="none", pad=2),
-            )
-        else:
-            ax.axis("off")
-
-    fig.suptitle("Esempi Misclassificati — FFNN MNIST", fontsize=12, y=0.995)
-    # Aumenta lo spazio verticale tra subplot per evitare overlap dei titoli
-    fig.subplots_adjust(top=0.92, hspace=0.6, wspace=0.15)
-
-    outpath = outdir / "misclassified_examples.png"
-    fig.savefig(outpath, dpi=220)
-    plt.close(fig)
-
-
-
-# ============================================================
-# Training routine (with resume)
-# ============================================================
-def train_or_resume(
-    cache_dir=".mnist_cache",
-    epochs=50,
-    batches=128,
-    eta=1e-3,
-):
-
-    X_train, X_test, y_train_i, y_test_i = load_mnist()
-    t_train = one_hot(y_train_i, 10)
-    t_test = one_hot(y_test_i, 10)
-
-    for arch_name, layout in architectures.items():
-        for act_name, act_function in activations.items():
-            print(f"\n🏗 Training architecture: {arch_name} — Layout: {layout} — Activation: {act_name}")
-
-            # costruisci il modello con layout e funzione di attivazione corrente
-            model = FFNN(
+            net = FFNN(
                 dimensions=layout,
-                hidden_func=act_function,
+                hidden_func=act,
                 output_func=softmax,
                 cost_func=CostCrossEntropy,
-                seed=123
+                seed=SEED
+            )
+            scheduler = Adam(lr, rho, rho2)
+            print(f"Training {model_filename} ...")
+
+            history = net.fit(
+                X=X_train, t=y_train,
+                scheduler=scheduler,
+                batches=batches,
+                epochs=epochs,
+                lam_l1=lam_l1,
+                lam_l2=lam_l2,
+                X_val=X_val, t_val=y_val
             )
 
-            # cache specifica per architettura + attivazione
-            arch_cache = Path(cache_dir) / f"{arch_name}_{act_name}"
-            ensure_dir(arch_cache)
-            weights_file = arch_cache / "weights.npz"
+            net.save_weights(model_path)
+            with open(done_marker, "w") as f:
+                f.write("ok")
 
-            state = load_state(arch_cache)
-            start_epoch = state["epoch_completed"] if state else 0
+            val_loss, val_acc = extract_val_metrics(history, net, X_val, y_val,
+                                                    mode=VAL_LOSS_MODE, last_n=LAST_N)
+            heat_loss[i_h,j_w] = val_loss
+            heat_acc[i_h,j_w]  = val_acc
 
-            # Resume if checkpoint exists
-            if weights_file.exists():
-                print("🔁 Resuming from checkpoint…")
-                model.load_weights(str(weights_file))
+    # Salvataggio CSV
+    df_loss = pd.DataFrame(heat_loss, index=n_hidden_list, columns=n_perceptrons_list)
+    df_loss.index.name = 'hidden_layers'
+    df_loss.columns.name = 'neurons_per_layer'
+    df_loss.to_csv(os.path.join(OUTPUT_DIR, run_dir, f"val_loss_{act.__name__}.csv"))
 
-            scheduler = Adam(eta=eta, rho=0.9, rho2=0.999)
-            history = {"train_errors": [], "val_errors": []}
+    df_acc = pd.DataFrame(heat_acc, index=n_hidden_list, columns=n_perceptrons_list)
+    df_acc.index.name = 'hidden_layers'
+    df_acc.columns.name = 'neurons_per_layer'
+    df_acc.to_csv(os.path.join(OUTPUT_DIR, run_dir, f"val_acc_{act.__name__}.csv"))
 
-            try:
-                for epoch in range(start_epoch, epochs):
-                    print(f"\n📘 Epoch {epoch+1}/{epochs}")
+    # Plot loss heatmap
+    plt.figure(figsize=(8,5))
+    im = plt.imshow(heat_loss, aspect='auto', origin='upper', interpolation='nearest')
+    plt.colorbar(im, label="Validation Loss")
+    plt.title(f"Validation Loss — activation: {act.__name__}")
+    plt.xlabel("Neurons per hidden layer")
+    plt.ylabel("Number of hidden layers")
+    plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list)
+    plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_DIR, run_dir, f"heatmap_loss_{act.__name__}.png"))
+    plt.close()
 
-                    scores = model.fit(
-                        X_train, t_train,
-                        scheduler=scheduler,
-                        batches=batches,
-                        epochs=1,
-                        X_val=X_test, t_val=t_test,
-                        save_on_interrupt=str(weights_file),
-                    )
+    # Plot accuracy heatmap
+    plt.figure(figsize=(8,5))
+    im = plt.imshow(heat_acc, aspect='auto', origin='upper', interpolation='nearest')
+    plt.colorbar(im, label="Validation Accuracy")
+    plt.title(f"Validation Accuracy — activation: {act.__name__}")
+    plt.xlabel("Neurons per hidden layer")
+    plt.ylabel("Number of hidden layers")
+    plt.xticks(ticks=np.arange(len(n_perceptrons_list)), labels=n_perceptrons_list)
+    plt.yticks(ticks=np.arange(len(n_hidden_list)), labels=n_hidden_list)
+    plt.tight_layout()
+    plt.savefig(os.path.join(OUTPUT_DIR, run_dir, f"heatmap_acc_{act.__name__}.png"))
+    plt.close()
 
-                    # update history
-                    history["train_errors"].append(float(scores["train_errors"][-1]))
-                    history["val_errors"].append(float(scores["val_errors"][-1]))
-
-                    # save checkpoint
-                    model.save_weights(str(weights_file))
-                    save_state(arch_cache, {"epoch_completed": epoch + 1})
-
-            except KeyboardInterrupt:
-                print("\n✋ Training interrupted — checkpoint saved.")
-                continue  # passa alla combinazione successiva
-
-            print("\n✅ Training finished!")
-
-            # cartella dei risultati specifica per architettura + attivazione
-            results_dir = Path(f"output/MNIST/mnist_ffnn_{arch_name}_{act_name}")
-            ensure_dir(results_dir)
-
-            # plots e valutazione
-            plot_learning_curves(history, results_dir)
-            test_acc, y_pred = accuracy_argmax(model, X_test, y_test_i)
-            print(f"➡️ Test accuracy (argmax) for {arch_name} with {act_name}: {test_acc:.4f}")
-            plot_confusion(y_test_i, y_pred, results_dir)
-            plot_misclassified(X_test, y_test_i, y_pred, results_dir)
-            print(f"\n🖼 Figures for {arch_name} + {act_name} saved in: ./{results_dir.name}/")
-
-    # ============================================================
-    # Final evaluation + plots
-    # ============================================================
-    #print("\n📊 Evaluating model…")
-    #test_acc, y_pred = accuracy_argmax(model, X_test, y_test_i)
-    #print(f"➡️ Test accuracy (argmax): {test_acc:.4f}")
-
-    #results_dir = Path("output/MINST/mnist_ffnn_results")
-    #ensure_dir(results_dir)
-
-    #plot_learning_curves(history, results_dir)
-    #plot_confusion(y_test_i, y_pred, results_dir)
-    #plot_misclassified(X_test, y_test_i, y_pred, results_dir)
-
-    #print("\n🖼 Figures saved in: ./mnist_ffnn_results/")
-    #print("   - learning_curves.png")
-    #print("   - confusion_matrix.png")
-    #print("   - misclassified_examples.png")
-
-
-# ============================================================
-# Script entry point
-# ============================================================
-if __name__ == "__main__":
-    train_or_resume()
+print("MNIST complexity analysis complete.")
