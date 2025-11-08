@@ -63,6 +63,7 @@ TAB.mkdir(parents=True, exist_ok=True)
 # -----------------------------
 # Extra metrics
 # -----------------------------
+
 def mae(y_true, y_pred):
     y_true = np.asarray(y_true).ravel()
     y_pred = np.asarray(y_pred).ravel()
@@ -403,6 +404,22 @@ avg_val_loss   = np.nanmean(val_losses,   axis=1)
 std_train_loss = np.nanstd(train_losses,  axis=1, ddof=1)
 std_val_loss   = np.nanstd(val_losses,    axis=1, ddof=1)
 
+# Export learning curves used in the plot
+pd.DataFrame({
+    "epoch": np.arange(len(avg_train_loss)),
+    "avg_train_mse": avg_train_loss,
+    "std_train_mse": std_train_loss,
+    "avg_val_mse": avg_val_loss,
+    "std_val_mse": std_val_loss,
+}).to_csv(TAB / "ffnn_learning_curves_avg.csv", index=False)
+
+# Also export per-run test MSEs (used by boxplot & bars)
+rows = []
+for i, m in enumerate(MODELS):
+    for r in range(N_RUNS):
+        rows.append({"run": r, "model": m, "test_mse": per_run[m]["mse_test"][r]})
+(pd.DataFrame(rows)).to_csv(TAB / "test_mse_per_run.csv", index=False)
+
 # -----------------------------
 # Console print (compact)
 # -----------------------------
@@ -416,24 +433,24 @@ for m in MODELS:
 # -----------------------------
 # Plots
 # -----------------------------
-# 1) FFNN average learning curves
+# 1) FFNN average learning curves (high-contrast colors)
 fig, ax = plt.subplots(figsize=(8, 6))
 epoch_range = np.arange(len(avg_train_loss))
-ax.plot(epoch_range, avg_train_loss, label='Average Train MSE')
-ax.plot(epoch_range, avg_val_loss,   label='Average Val MSE')
+ax.plot(epoch_range, avg_train_loss, label='Average Train MSE', linewidth=2.0, color='red')
+ax.plot(epoch_range, avg_val_loss,   label='Average Val MSE',   linewidth=2.0, color='blue')
 ax.fill_between(epoch_range, avg_train_loss - std_train_loss, avg_train_loss + std_train_loss,
-                alpha=0.2, label='Train std')
+                alpha=0.15, label='Train std', color='red')
 ax.fill_between(epoch_range, avg_val_loss - std_val_loss,     avg_val_loss + std_val_loss,
-                alpha=0.2, label='Val std')
+                alpha=0.15, label='Val std', color='blue')
 ax.set_xlabel('Epochs')
 ax.set_ylabel('MSE')
 ax.set_title('FFNN Learning Curves (Averaged over Runs)')
 ax.legend()
 plt.tight_layout()
-plt.savefig(FIG / "ffnn_loss_epochs.png", dpi=150)
+plt.savefig(FIG / "ffnn_loss_epochs.png", dpi=200)
 plt.close(fig)
 
-# 2) Fits on the last run (test set)
+# 2) Fits on the last run (test set) + CSV EXPORT with gray datapoints & high-contrast lines
 if x_plot is not None:
     x1d   = np.asarray(x_plot).reshape(-1)
     y1d   = np.asarray(y_plot).reshape(-1)
@@ -450,40 +467,64 @@ if x_plot is not None:
     y_lasso_sorted= ylas1[order]
     y_nn_sorted   = ynn1[order]
 
+    # -------- CSV EXPORT --------
+    df_plot = pd.DataFrame({
+        "x": x_sorted,
+        "y_true": y_sorted,
+        "OLS": y_ols_sorted,
+        "Ridge": y_ridge_sorted,
+        "Lasso": y_lasso_sorted,
+        "FFNN": y_nn_sorted,
+    })
+    df_plot.to_csv(TAB / "runge_fits_last_run.csv", index=False)
+    print(f"Saved CSV of plotted data -> {TAB / 'runge_fits_last_run.csv'}")
+
+    # -------- PLOT --------
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.scatter(x_sorted, y_sorted, label='Test Data (with noise)', alpha=0.5)
-    ax.plot(x_sorted, y_ols_sorted,   label=f'OLS deg {best_degree}', linewidth=2)
-    ax.plot(x_sorted, y_ridge_sorted, label='Ridge (best λ)', linewidth=2)
-    ax.plot(x_sorted, y_lasso_sorted, label='Lasso (best λ)', linewidth=2)
-    ax.plot(x_sorted, y_nn_sorted,    label='FFNN', linewidth=2)
+
+    # Scatter datapoints in gray
+    ax.scatter(x_sorted, y_sorted, label="Test Data (with noise)",
+               alpha=0.4, color="gray")
+
+    # High-contrast plot colors
+    ax.plot(x_sorted, y_ols_sorted,   label=f"OLS deg {best_degree}",
+            linewidth=2.5, color="red")
+    ax.plot(x_sorted, y_ridge_sorted, label="Ridge (best λ)",
+            linewidth=2.5, color="blue")
+    ax.plot(x_sorted, y_lasso_sorted, label="Lasso (best λ)",
+            linewidth=2.5, color="orange")
+    ax.plot(x_sorted, y_nn_sorted,    label="FFNN",
+            linewidth=2.5, color="green")
+
     ax.set_xlabel('x'); ax.set_ylabel('y')
     ax.set_title('Runge — Fits on Test Set (Last Run)')
     ax.legend()
     plt.tight_layout()
-    plt.savefig(FIG / "runge_fits_test.png", dpi=150)
+    plt.savefig(FIG / "runge_fits_test.png", dpi=200)
     plt.close(fig)
 
-# 3) Boxplot of Test MSE across runs
+# 3) Boxplot of Test MSE across runs (fix labels arg)
 fig, ax = plt.subplots(figsize=(8, 6))
 data = [per_run[m]["mse_test"] for m in MODELS]
 ax.boxplot(data, tick_labels=MODELS, showmeans=True)
 ax.set_ylabel("Test MSE")
 ax.set_title("Test MSE distribution across runs")
 plt.tight_layout()
-plt.savefig(FIG / "test_mse_boxplot.png", dpi=150)
+plt.savefig(FIG / "test_mse_boxplot.png", dpi=200)
 plt.close(fig)
 
-# 4) Bar chart of mean±std Test MSE
+# 4) Bar chart of mean±std Test MSE (high-contrast bars: mapped colors)
 means = [np.nanmean(per_run[m]["mse_test"]) for m in MODELS]
 stds  = [np.nanstd(per_run[m]["mse_test"], ddof=1) for m in MODELS]
+colors = ["red", "blue", "orange", "green"]
 fig, ax = plt.subplots(figsize=(8, 6))
 pos = np.arange(len(MODELS))
-ax.bar(pos, means, yerr=stds, capsize=5)
+ax.bar(pos, means, yerr=stds, capsize=5, color=colors)
 ax.set_xticks(pos); ax.set_xticklabels(MODELS)
 ax.set_ylabel("Test MSE (mean ± std)")
 ax.set_title("Average generalization error")
 plt.tight_layout()
-plt.savefig(FIG / "test_mse_bar_mean_std.png", dpi=150)
+plt.savefig(FIG / "test_mse_bar_mean_std.png", dpi=200)
 plt.close(fig)
 
 print(f"\nPart B done. Aggregated over {N_RUNS} runs.")
