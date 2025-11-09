@@ -40,7 +40,6 @@ def normalize_act_name(name: str) -> str:
     return re.sub(r"[^A-Za-z0-9]+", "", name).lower()
 
 def get_activation_function(act_name: str):
-
     """Return activation callable from a name (case-insensitive, with aliases)."""
     key = normalize_act_name(act_name)
     mapping = {
@@ -50,7 +49,6 @@ def get_activation_function(act_name: str):
         "leaky": LRELU,
         "sigmoid": sigmoid,
         "identity": identity,  # supported if you ever train with it
-
     }
     func = mapping.get(key)
     if func is None:
@@ -65,7 +63,6 @@ def canonical_file_token(act_name: str) -> str:
         "lrelu": "LRELU",
         "leakyrelu": "LRELU",
         "leaky": "LRELU",
-    
         "sigmoid": "sigmoid",
         "identity": "identity",
     }
@@ -101,10 +98,11 @@ def evaluate_one_model(
     hidden_activation_name: str,
     save_plot: bool,
     layout_out_dir: str,
+    save_curve_csv: bool = True,  # <--- NEW
 ):
     """
     Load one model, predict on [-1,1], compute MSE vs true Runge,
-    and optionally save a per-activation plot to the layout-specific directory.
+    and optionally save a per-activation plot & CSV to the layout-specific directory.
 
     Returns:
         mse (float), X_eval (ndarray shape [N,1]), y_pred (ndarray shape [N,1])
@@ -142,8 +140,9 @@ def evaluate_one_model(
     plt.legend()
     plt.grid(True)
 
+    os.makedirs(layout_out_dir, exist_ok=True)
+
     if save_plot:
-        os.makedirs(layout_out_dir, exist_ok=True)
         png_name = f"eval_{model_filename(n_hidden, width, hidden_activation_name)[:-4]}.png"
         out_png = os.path.join(layout_out_dir, png_name)
         plt.savefig(out_png, dpi=150, bbox_inches="tight")
@@ -152,6 +151,24 @@ def evaluate_one_model(
         plt.show()
 
     plt.close()
+
+    # === CSV SAVE (per-activation curve) ===
+    if save_curve_csv:
+        # Align noisy reference to the same grid (both are linspace with same length = 200)
+        x = X_eval.ravel()
+        y_t = y_true.ravel()
+        y_p = y_pred.ravel()
+        y_ref = Y_REF_NOISY.ravel()
+
+        csv_name = f"data_{model_filename(n_hidden, width, hidden_activation_name)[:-4]}.csv"
+        out_csv = os.path.join(layout_out_dir, csv_name)
+        with open(out_csv, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(["x", "y_true", "y_pred", "y_ref_noisy"])
+            for xi, yt, yp, yr in zip(x, y_t, y_p, y_ref):
+                writer.writerow([f"{xi:.10f}", f"{yt:.10f}", f"{yp:.10f}", f"{yr:.10f}"])
+        print(f"[Saved] per-activation curve CSV -> {out_csv}")
+
     return mse, X_eval, y_pred
 
 # -----------------------------
@@ -165,6 +182,7 @@ def evaluate_all_activations_for_layout(
     save_plot: bool = True,
     base_plot_dir: str = "output/specific_model_eval",
     save_csv: bool = True,
+    save_curve_csv: bool = True,  # <--- NEW
 ) -> dict:
     """
     Evaluate a set of activations for a given run folder and layout.
@@ -208,6 +226,7 @@ def evaluate_all_activations_for_layout(
                 hidden_activation_name=act,
                 save_plot=save_plot,
                 layout_out_dir=layout_out_dir,
+                save_curve_csv=save_curve_csv,  # <--- NEW
             )
             results[act] = {
                 "mse": mse,
@@ -225,7 +244,7 @@ def evaluate_all_activations_for_layout(
             # Any other error (shape mismatch, etc.) -> skip
             print(f"[Skip] {act:<8} (error: {type(e).__name__}: {e})")
 
-    # Write CSV summary
+    # Write CSV summary (meta)
     if save_csv and results:
         csv_path = os.path.join(layout_out_dir, "summary.csv")
         with open(csv_path, "w", newline="") as f:
@@ -259,8 +278,10 @@ def evaluate_all_activations_for_layout(
                 label=f"{act} (MSE {mse:.3e})",
             )
 
-        plt.title(f"Overlay predictions — run '{os.path.basename(os.path.normpath(run_dir))}'\n"
-                  f"layout: hidden{n_hidden}, width={width}")
+        plt.title(
+            f"Overlay predictions — run '{os.path.basename(os.path.normpath(run_dir))}'\n"
+            f"layout: hidden{n_hidden}, width={width}"
+        )
         plt.xlabel("x")
         plt.ylabel("y")
         plt.legend()
@@ -273,6 +294,29 @@ def evaluate_all_activations_for_layout(
         plt.close()
         print(f"[Saved] overlay plot -> {overlay_png}")
         print(f"[Saved] overlay plot -> {overlay_pdf}")
+
+        # === CSV SAVE (overlay, long format) ===
+        if save_curve_csv:
+            overlay_csv = os.path.join(layout_out_dir, "overlay_data.csv")
+            with open(overlay_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow([
+                    "x", "y_true", "y_pred", "y_ref_noisy",
+                    "activation", "mse", "model_path"
+                ])
+                x = X_overlay.ravel()
+                y_t = y_true.ravel()
+                y_ref = Y_REF_NOISY.ravel()
+                for act, info in sorted(results.items(), key=lambda kv: kv[1]["mse"]):
+                    y_p = info["y_pred"].ravel()
+                    mse = info["mse"]
+                    mpath = info["model_path"]
+                    for xi, yt, yp, yr in zip(x, y_t, y_p, y_ref):
+                        writer.writerow([
+                            f"{xi:.10f}", f"{yt:.10f}", f"{yp:.10f}", f"{yr:.10f}",
+                            act, f"{mse:.10f}", mpath
+                        ])
+            print(f"[Saved] overlay data CSV -> {overlay_csv}")
     else:
         print("[Info] No models were evaluated (overlay not created).")
 
@@ -299,5 +343,5 @@ if __name__ == "__main__":
         save_plot=True,
         base_plot_dir="output/specific_model_eval",
         save_csv=True,
+        save_curve_csv=True,  # <--- NEW
     )
-
