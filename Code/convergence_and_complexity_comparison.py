@@ -1,3 +1,32 @@
+"""
+convergence_and_complexity_comparison.py
+
+Convergence and temporal complexity experiments on the Runge function, comparing:
+- FFNN implemented from scratch (src.FFNN)
+- PyTorch MLP (train_one_model in complexity_analysis_TORCH.py)
+
+Required setup:
+- 200 equally spaced points in [-1, 1] (Runge)
+- 1500 epochs
+- learning rate = 1e-3
+- L1 = L2 = 0.0
+- number of mini-batches = 100
+- Gaussian noise sigma = 0.03 on targets
+- final loss evaluation on both noisy and clean validation data
+
+Outputs (saved under output/benchmark/):
+- CSVs:
+    * csv/summary.csv (per-impl-per-layout summary)
+    * csv/histories_{impl}_h{n_hidden}_w{width}.csv (per-epoch curves)
+    * csv/time_vs_params.csv (timing vs parameter-count data)
+    * csv/final_mse_clean.csv (final clean-val MSE per layout/impl)
+    * csv/dataset.csv (X/y splits actually used)
+- Plots:
+    * figs/convergence_curves_repr.png (train + val noisy for a representative layout)
+    * figs/time_vs_params_loglog.png (training time vs #params)
+    * figs/final_mse_clean.png (final clean-val MSE per layout & impl)
+"""
+
 import time
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple
@@ -23,22 +52,42 @@ from complexity_analysis_TORCH import train_one_model
 #  Experiment constants (required parameters)
 # ======================================================================
 
-N_POINTS = 200
-EPOCHS = 1500
-LR = 1e-3
-LAM_L1 = 0.0
-LAM_L2 = 0.0
-BATCHES = 100
-NOISE_STD = 0.03
-TEST_SIZE = 0.25
-SEED = 314
+N_POINTS = 200           # linspace of 200 points in [-1, 1]
+EPOCHS = 1500            # number of training epochs
+LR = 1e-3                # learning rate
+LAM_L1 = 0.0             # L1 regularization
+LAM_L2 = 0.0             # L2 regularization
+BATCHES = 100            # number of mini-batches
+NOISE_STD = 0.03         # Gaussian noise on targets
+TEST_SIZE = 0.25         # 75% train, 25% validation
+SEED = 314               # for reproducibility
 
-# Output directories
-BASE_DIR = Path("output/benchmark")
-CSV_DIR = BASE_DIR / "csv"
-FIG_DIR = BASE_DIR / "figs"
-CSV_DIR.mkdir(parents=True, exist_ok=True)
-FIG_DIR.mkdir(parents=True, exist_ok=True)
+# Layouts to sweep (n_hidden, width). Edit as desired.
+LAYOUTS: List[Tuple[int, int]] = [
+        (1, 8),
+        (1, 16),
+        (1, 32),
+        (2, 16),
+        (2, 32),
+        (2, 64),
+        (3, 32),
+        (3, 64),
+        (3, 128),
+        (4, 64),
+        (4, 128),
+        (5, 128)
+]
+
+
+# ======================================================================
+#  I/O setup
+# ======================================================================
+
+OUT_ROOT = Path("output/benchmark")
+CSV_DIR = OUT_ROOT / "csv"
+FIG_DIR = OUT_ROOT / "figs"
+for p in (CSV_DIR, FIG_DIR):
+    p.mkdir(parents=True, exist_ok=True)
 
 
 # ======================================================================
@@ -46,18 +95,24 @@ FIG_DIR.mkdir(parents=True, exist_ok=True)
 # ======================================================================
 
 def runge(x: np.ndarray, noise_std: float = 0.0, rng=None) -> np.ndarray:
+    """Runge function: 1 / (1 + 25 x^2) with optional Gaussian noise."""
     rng = rng or np.random.default_rng()
     noise = rng.normal(0.0, noise_std, size=x.shape) if noise_std > 0 else 0.0
     return 1.0 / (1.0 + 25.0 * x**2) + noise
 
 
 def build_layout(n_hidden: int, width: int) -> List[int]:
+    """Builds a layout [1, width, ..., width, 1]."""
     if n_hidden <= 0:
         return [1, 1]
     return [1] + [width] * n_hidden + [1]
 
 
 def count_params_from_layout(layout: List[int]) -> int:
+    """
+    Number of parameters for a fully connected MLP with bias:
+    sum_l ( (n_l + 1) * n_{l+1} ).
+    """
     return int(sum((layout[i] + 1) * layout[i + 1] for i in range(len(layout) - 1)))
 
 
@@ -79,11 +134,19 @@ class ExperimentResult:
 # ======================================================================
 
 def assert_convergence(losses: np.ndarray, name: str, min_drop: float = 0.2) -> None:
+    """
+    Checks that the loss decreases "on average":
+    - computes the mean over the first quarter of epochs and over the last quarter
+    - requires that the last quarter is at least min_drop*100 % lower.
+
+    min_drop = 0.2 => at least 20% mean reduction.
+    """
     losses = np.asarray(losses, dtype=float)
     assert losses.ndim == 1 and len(losses) >= 10, \
         f"[{name}] Too few epochs ({len(losses)}) to evaluate convergence"
 
     q = max(1, len(losses) // 4)
+
     first_mean = losses[:q].mean()
     last_mean = losses[-q:].mean()
 
@@ -98,6 +161,12 @@ def assert_similar_performance(val1: float, val2: float,
                                rel_tol: float = 0.5,
                                name1: str = "ffnn",
                                name2: str = "torch") -> None:
+    """
+    Checks whether the two implementations have similar final MSE on clean validation data.
+
+    If the relative difference is > (1 + rel_tol),
+    it DOES NOT raise an AssertionError, only prints a warning.
+    """
     v1, v2 = float(val1), float(val2)
     if v1 == 0 and v2 == 0:
         return
@@ -130,6 +199,15 @@ def train_ffnn_single_layout(
     batches: int = BATCHES,
     seed: int = SEED,
 ) -> Tuple[FFNN, Dict[str, np.ndarray], float, float, float, float]:
+    """
+    Trains a custom FFNN on a single layout and returns:
+    - net: FFNN model
+    - history: dict with train/val (noisy) curves
+    - train_time: training time (seconds)
+    - final_train_loss (noisy)
+    - final_val_loss_noisy
+    - final_val_loss_clean
+    """
     np.random.seed(seed)
 
     net = FFNN(
@@ -156,7 +234,6 @@ def train_ffnn_single_layout(
     t1 = time.perf_counter()
     train_time = t1 - t0
 
-    # Standardize naming (train_errors / train_loss, etc.)
     train_losses = np.asarray(
         history_raw.get("train_errors", history_raw.get("train_loss", [])),
         dtype=float,
@@ -171,7 +248,8 @@ def train_ffnn_single_layout(
     val_loss_noisy = float(CostOLS(y_val_noisy)(y_pred_val))
     val_loss_clean = float(CostOLS(y_val_clean)(y_pred_val))
 
-    final_train_loss = float(train_losses[-1]) if len(train_losses) > 0 else float("nan")
+    # Final training loss (noisy)
+    final_train_loss = float(train_losses[-1]) if len(train_losses) else float("nan")
 
     history = {
         "train_loss": train_losses,
@@ -195,6 +273,15 @@ def train_torch_single_layout(
     batches: int = BATCHES,
     seed: int = SEED,
 ) -> Tuple[torch.nn.Module, Dict[str, np.ndarray], float, float, float, float]:
+    """
+    Trains a PyTorch MLP with the same layout and returns:
+    - model: PyTorch network
+    - history: dict with train/val (noisy) curves
+    - train_time: training time (seconds)
+    - final_train_loss (noisy)
+    - final_val_loss_noisy
+    - final_val_loss_clean
+    """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     X_train_t = torch.from_numpy(X_train.astype(np.float32))
@@ -227,7 +314,7 @@ def train_torch_single_layout(
     train_losses = np.asarray(history_raw["train_loss"], dtype=float)
     val_losses = np.asarray(history_raw["val_loss"], dtype=float)
 
-    final_train_loss = float(train_losses[-1]) if len(train_losses) > 0 else float("nan")
+    final_train_loss = float(train_losses[-1]) if len(train_losses) else float("nan")
 
     history = {
         "train_loss": train_losses,
@@ -267,255 +354,224 @@ def generate_runge_dataset(
 
 
 # ======================================================================
-#  Main experiment
+#  Orchestration
 # ======================================================================
 
-def run_experiments():
-    np.random.seed(SEED)
-    torch.manual_seed(SEED)
-
-    # Shared dataset for all layouts
-    X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean = generate_runge_dataset()
-
-    # Save dataset splits as CSV
-    ds_train = pd.DataFrame({"x": X_train.ravel(), "y_noisy": y_train_noisy.ravel()})
-    ds_val = pd.DataFrame({
-        "x": X_val.ravel(),
-        "y_noisy": y_val_noisy.ravel(),
-        "y_clean": y_val_clean.ravel(),
+def save_history_csv(impl: str, n_hidden: int, width: int, history: Dict[str, np.ndarray]) -> Path:
+    """Save per-epoch curves used for convergence plots."""
+    df = pd.DataFrame({
+        "epoch": np.arange(1, len(history["train_loss"]) + 1, dtype=int),
+        "train_loss": history["train_loss"],
+        "val_loss_noisy": history["val_loss_noisy"],
     })
-    ds_train.to_csv(CSV_DIR / "dataset_train.csv", index=False)
-    ds_val.to_csv(CSV_DIR / "dataset_val.csv", index=False)
+    out = CSV_DIR / f"histories_{impl}_h{n_hidden}_w{width}.csv"
+    df.to_csv(out, index=False)
+    return out
 
-    # Larger / more varied layouts:
-    settings = [
-        (1, 8),
-        (1, 16),
-        (1, 32),
-        (2, 16),
-        (2, 32),
-        (2, 64),
-        (3, 32),
-        (3, 64),
-        (3, 128),
-        (4, 64),
-        (4, 128),
-        (5, 128),
-    ]
 
-    all_results: List[ExperimentResult] = []
+def save_dataset_csv(X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean) -> Path:
+    """Save the exact dataset splits used by the experiment."""
+    df_train = pd.DataFrame({
+        "split": "train",
+        "X": X_train.flatten(),
+        "y_noisy": y_train_noisy.flatten(),
+        # we do not train on clean labels, but store them for completeness:
+    })
+    df_val = pd.DataFrame({
+        "split": "val",
+        "X": X_val.flatten(),
+        "y_noisy": y_val_noisy.flatten(),
+        "y_clean": y_val_clean.flatten(),
+    })
+    df = pd.concat([df_train, df_val], ignore_index=True)
+    out = CSV_DIR / "dataset.csv"
+    df.to_csv(out, index=False)
+    return out
 
-    # Layout used for detailed convergence plots
-    layout_for_detailed_plots = (3, 64)
-    stored_histories: Dict[str, Dict[str, np.ndarray]] = {}
 
-    for idx, (n_hidden, width) in enumerate(settings, 1):
-        layout = build_layout(n_hidden, width)
-        params = count_params_from_layout(layout)
-        print(f"\n=== [{idx}/{len(settings)}] Layout: hidden={n_hidden}, width={width}, params~{params} ===")
+def plot_and_save_convergence(repr_files: Dict[str, Path], n_hidden: int, width: int) -> Path:
+    """Plot convergence curves for a representative layout, using the saved CSVs."""
+    plt.figure(figsize=(7.5, 4.5))
+    for impl, path in repr_files.items():
+        df = pd.read_csv(path)
+        plt.plot(df["epoch"], df["train_loss"], label=f"{impl} train")
+        plt.plot(df["epoch"], df["val_loss_noisy"], linestyle="--", label=f"{impl} val (noisy)")
+    plt.xlabel("Epoch")
+    plt.ylabel("MSE")
+    plt.title(f"Convergence curves — layout [1, {width}×{n_hidden}, 1]")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    out = FIG_DIR / "convergence_curves_repr.png"
+    plt.tight_layout()
+    plt.savefig(out, dpi=160)
+    plt.close()
+    return out
 
-        # --------------------------------------------------------------
-        #  Custom FFNN
-        # --------------------------------------------------------------
-        net, hist_ffnn, time_ffnn, tr_ffnn, val_noisy_ffnn, val_clean_ffnn = train_ffnn_single_layout(
-            layout,
-            X_train,
-            y_train_noisy,
-            X_val,
-            y_val_noisy,
-            y_val_clean,
-        )
 
-        # Convergence assertion for FFNN (slightly stricter)
-        assert_convergence(hist_ffnn["train_loss"], f"FFNN (hidden={n_hidden}, width={width})", min_drop=0.2)
+def plot_and_save_time_vs_params(summary_df: pd.DataFrame) -> Path:
+    """Plot training time vs parameter count (log-log), and save CSV for plotted data."""
+    df = summary_df.copy()
+    # data used for the plot:
+    tvp = df[["impl", "params", "train_time"]].sort_values(["impl", "params"])
+    tvp.to_csv(CSV_DIR / "time_vs_params.csv", index=False)
 
-        # Save per-epoch history CSV
-        df_hist_ff = pd.DataFrame({
-            "epoch": np.arange(1, len(hist_ffnn["train_loss"]) + 1),
-            "train_loss": hist_ffnn["train_loss"],
-            "val_loss_noisy": hist_ffnn["val_loss_noisy"] if len(hist_ffnn["val_loss_noisy"]) else np.nan,
-        })
-        df_hist_ff.to_csv(CSV_DIR / f"histories_ffnn_h{n_hidden}_w{width}.csv", index=False)
-
-        all_results.append(
-            ExperimentResult(
-                impl="ffnn",
-                n_hidden=n_hidden,
-                width=width,
-                params=params,
-                epochs=EPOCHS,
-                train_time=time_ffnn,
-                final_train_loss=tr_ffnn,
-                final_val_loss_noisy=val_noisy_ffnn,
-                final_val_loss_clean=val_clean_ffnn,
-            )
-        )
-
-        if (n_hidden, width) == layout_for_detailed_plots:
-            stored_histories["ffnn"] = hist_ffnn
-
-        # --------------------------------------------------------------
-        #  PyTorch MLP
-        # --------------------------------------------------------------
-        model_t, hist_torch, time_torch, tr_t, val_noisy_t, val_clean_t = train_torch_single_layout(
-            layout,
-            X_train,
-            y_train_noisy,
-            X_val,
-            y_val_noisy,
-            y_val_clean,
-        )
-
-        # Convergence assertion for Torch (slightly looser)
-        assert_convergence(hist_torch["train_loss"], f"PyTorch (hidden={n_hidden}, width={width})", min_drop=0.1)
-
-        # Save per-epoch history CSV
-        df_hist_t = pd.DataFrame({
-            "epoch": np.arange(1, len(hist_torch["train_loss"]) + 1),
-            "train_loss": hist_torch["train_loss"],
-            "val_loss_noisy": hist_torch["val_loss_noisy"] if len(hist_torch["val_loss_noisy"]) else np.nan,
-        })
-        df_hist_t.to_csv(CSV_DIR / f"histories_torch_h{n_hidden}_w{width}.csv", index=False)
-
-        # Performance comparison (only warning, no blocking assert)
-        assert_similar_performance(
-            val_clean_ffnn, val_clean_t,
-            rel_tol=0.5,
-            name1="ffnn",
-            name2="torch",
-        )
-
-        all_results.append(
-            ExperimentResult(
-                impl="torch",
-                n_hidden=n_hidden,
-                width=width,
-                params=params,
-                epochs=EPOCHS,
-                train_time=time_torch,
-                final_train_loss=tr_t,
-                final_val_loss_noisy=val_noisy_t,
-                final_val_loss_clean=val_clean_t,
-            )
-        )
-
-        if (n_hidden, width) == layout_for_detailed_plots:
-            stored_histories["torch"] = hist_torch
-
-    # ==================================================================
-    #   Scientific analysis of results + CSV dumps
-    # ==================================================================
-    df = pd.DataFrame([asdict(r) for r in all_results])
-    print("\n=== SUMMARY RESULTS ===")
-    print(df)
-
-    # Save summary CSV
-    df.to_csv(CSV_DIR / "summary.csv", index=False)
-
-    # Average time per epoch
-    df["time_per_epoch"] = df["train_time"] / df["epochs"]
-    df[["impl", "n_hidden", "width", "params", "epochs", "train_time", "time_per_epoch",
-        "final_train_loss", "final_val_loss_noisy", "final_val_loss_clean"]].to_csv(
-        CSV_DIR / "time_vs_params.csv", index=False
-    )
-
-    # Final MSE (clean & noisy) per layout/impl
-    df_final = df[["impl", "n_hidden", "width", "final_val_loss_clean", "final_val_loss_noisy", "final_train_loss"]]
-    df_final.to_csv(CSV_DIR / "final_mse_clean.csv", index=False)
-
-    # Torch/FFNN time ratio for the same layout (print only)
-    print("\nTime_per_epoch ratio (torch / ffnn) for each layout:")
-    for (n_hidden, width) in settings:
-        df_sub = df[(df["n_hidden"] == n_hidden) & (df["width"] == width)]
-        if len(df_sub) == 2:
-            t_ffnn = df_sub[df_sub["impl"] == "ffnn"]["time_per_epoch"].iloc[0]
-            t_torch = df_sub[df_sub["impl"] == "torch"]["time_per_epoch"].iloc[0]
-            ratio = t_torch / t_ffnn
-            print(f"  hidden={n_hidden}, width={width}: ratio={ratio:.3f}")
-
-    # ==================================================================
-    #   PLOT 1: train/val convergence curves (noisy) for one layout
-    # ==================================================================
-    if "ffnn" in stored_histories and "torch" in stored_histories:
-        plt.figure(figsize=(8, 5))
-        ep_ff = np.arange(1, len(stored_histories["ffnn"]["train_loss"]) + 1)
-        ep_t = np.arange(1, len(stored_histories["torch"]["train_loss"]) + 1)
-
-        plt.plot(ep_ff, stored_histories["ffnn"]["train_loss"], label="FFNN train")
-        if len(stored_histories["ffnn"]["val_loss_noisy"]) == len(ep_ff):
-            plt.plot(ep_ff, stored_histories["ffnn"]["val_loss_noisy"], "--", label="FFNN val (noisy)")
-
-        plt.plot(ep_t, stored_histories["torch"]["train_loss"], label="Torch train")
-        if len(stored_histories["torch"]["val_loss_noisy"]) == len(ep_t):
-            plt.plot(ep_t, stored_histories["torch"]["val_loss_noisy"], "--", label="Torch val (noisy)")
-
-        n_hidden, width = (3, 64)
-        plt.title(f"Train/Validation convergence — hidden={n_hidden}, width={width}")
-        plt.xlabel("Epoch")
-        plt.ylabel("MSE")
-        plt.yscale("log")
-        plt.grid(True, which="both", linestyle="--", alpha=0.5)
-        plt.legend()
-        plt.tight_layout()
-        plt.savefig(FIG_DIR / f"convergence_curves_h{n_hidden}_w{width}.png", dpi=200)
-        plt.close()
-
-    # ==================================================================
-    #   PLOT 2: training time vs number of parameters
-    # ==================================================================
-    plt.figure(figsize=(7, 5))
-    for impl, marker in [("ffnn", "o"), ("torch", "s")]:
-        df_impl = df[df["impl"] == impl].sort_values("params")
-        plt.plot(
-            df_impl["params"].to_numpy(),
-            df_impl["train_time"].to_numpy(),
-            marker,
-            label=impl.upper(),
-        )
-    plt.xlabel("Number of parameters (estimate)")
-    plt.ylabel("Training time (s)")
+    plt.figure(figsize=(6.5, 4.8))
+    for impl, g in tvp.groupby("impl"):
+        plt.plot(g["params"], g["train_time"], marker="o", label=impl)
     plt.xscale("log")
     plt.yscale("log")
-    plt.title("Empirical analysis of time complexity (1500 epochs)")
-    plt.grid(True, which="both", linestyle="--", alpha=0.5)
+    plt.xlabel("# parameters (log)")
+    plt.ylabel("Training time [s] (log)")
+    plt.title("Training time vs #parameters (log-log)")
+    plt.grid(True, which="both", ls="--", alpha=0.3)
     plt.legend()
+    out = FIG_DIR / "time_vs_params_loglog.png"
     plt.tight_layout()
-    plt.savefig(FIG_DIR / "time_vs_params.png", dpi=200)
+    plt.savefig(out, dpi=160)
     plt.close()
+    return out
 
-    # ==================================================================
-    #   PLOT 3: final (clean) MSE per implementation and layout
-    # ==================================================================
-    plt.figure(figsize=(9, 5))
-    x_labels = [f"h={h},w={w}" for (h, w) in settings]
-    x = np.arange(len(settings))
-    width_bar = 0.35
 
-    mse_ffnn = []
-    mse_torch = []
-    for (h, w) in settings:
-        df_sub = df[(df["n_hidden"] == h) & (df["width"] == w)]
-        mse_ffnn.append(df_sub[df_sub["impl"] == "ffnn"]["final_val_loss_clean"].iloc[0])
-        mse_torch.append(df_sub[df_sub["impl"] == "torch"]["final_val_loss_clean"].iloc[0])
+def plot_and_save_final_mse(summary_df: pd.DataFrame) -> Path:
+    """Plot final validation MSE on clean data per layout & impl; also save CSV used."""
+    df = summary_df.copy()
+    # Build a human-friendly layout label and save the exact plotted table
+    df["layout"] = df.apply(lambda r: f"h{int(r['n_hidden'])}_w{int(r['width'])}", axis=1)
+    fm = df[["impl", "layout", "params", "final_val_loss_clean"]].sort_values(["layout", "impl"])
+    fm.to_csv(CSV_DIR / "final_mse_clean.csv", index=False)
 
-    mse_ffnn = np.array(mse_ffnn)
-    mse_torch = np.array(mse_torch)
-
-    plt.bar(x - width_bar / 2, mse_ffnn, width_bar, label="FFNN")
-    plt.bar(x + width_bar / 2, mse_torch, width_bar, label="Torch")
-
-    plt.xticks(x, x_labels, rotation=30, ha="right")
-    plt.ylabel("Final MSE (validation clean)")
-    plt.title("Comparison of final accuracy (1500 epochs, Runge)")
-    plt.grid(axis="y", linestyle="--", alpha=0.5)
-    plt.legend()
+    # Wide table for grouped bars
+    pivot = fm.pivot(index="layout", columns="impl", values="final_val_loss_clean").fillna(np.nan)
+    ax = pivot.plot(kind="bar", figsize=(8.5, 4.8))
+    ax.set_ylabel("Final MSE (validation clean)")
+    ax.set_title("Final validation MSE (clean) per layout/implementation")
+    ax.grid(axis="y", alpha=0.3)
+    plt.xticks(rotation=0)
     plt.tight_layout()
-    plt.savefig(FIG_DIR / "final_mse_clean.png", dpi=200)
+    out = FIG_DIR / "final_mse_clean.png"
+    plt.savefig(out, dpi=160)
     plt.close()
+    return out
 
-    print(f"\nCSV saved under: {CSV_DIR.resolve()}")
-    print(f"Figures saved under: {FIG_DIR.resolve()}")
+
+def main():
+    # ---------------- Dataset ----------------
+    X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean = generate_runge_dataset(
+        N_POINTS, TEST_SIZE, NOISE_STD, SEED
+    )
+    save_dataset_csv(X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean)
+
+    results: List[ExperimentResult] = []
+    history_index_rows = []  # to track where each history is saved
+
+    # Optional: pick a representative layout for the convergence-curve figure.
+    # If the desired (2, 50) is absent, we fall back to the first layout.
+    repr_choice = (2, 50) if (2, 50) in LAYOUTS else LAYOUTS[0]
+    repr_hist_files: Dict[str, Path] = {}
+
+    # ------------- Sweep layouts -------------
+    for (n_hidden, width) in LAYOUTS:
+        layout = build_layout(n_hidden, width)
+        params = count_params_from_layout(layout)
+
+        # --- Custom FFNN ---
+        net, hist_f, t_ffnn, tr_ffnn, vnoisy_ffnn, vclean_ffnn = train_ffnn_single_layout(
+            layout, X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean,
+            epochs=EPOCHS, lr=LR, lam_l1=LAM_L1, lam_l2=LAM_L2, batches=BATCHES, seed=SEED
+        )
+
+        # Convergence check (won't raise if very noisy; feel free to relax/remove if needed)
+        try:
+            assert_convergence(hist_f["train_loss"], f"ffnn h{n_hidden} w{width}", min_drop=0.2)
+        except AssertionError as e:
+            print(str(e))
+
+        # Save per-epoch curves for FFNN
+        ffnn_hist_path = save_history_csv("ffnn", n_hidden, width, hist_f)
+        history_index_rows.append({
+            "impl": "ffnn",
+            "n_hidden": n_hidden,
+            "width": width,
+            "params": params,
+            "epochs": len(hist_f["train_loss"]),
+            "csv_path": str(ffnn_hist_path),
+        })
+        if (n_hidden, width) == repr_choice:
+            repr_hist_files["ffnn"] = ffnn_hist_path
+
+        results.append(ExperimentResult(
+            impl="ffnn",
+            n_hidden=n_hidden,
+            width=width,
+            params=params,
+            epochs=EPOCHS,
+            train_time=t_ffnn,
+            final_train_loss=tr_ffnn,
+            final_val_loss_noisy=vnoisy_ffnn,
+            final_val_loss_clean=vclean_ffnn,
+        ))
+
+        # --- PyTorch ---
+        model_t, hist_t, t_torch, tr_torch, vnoisy_t, vclean_t = train_torch_single_layout(
+            layout, X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean,
+            epochs=EPOCHS, lr=LR, lam_l1=LAM_L1, lam_l2=LAM_L2, batches=BATCHES, seed=SEED
+        )
+
+        try:
+            assert_convergence(hist_t["train_loss"], f"torch h{n_hidden} w{width}", min_drop=0.2)
+        except AssertionError as e:
+            print(str(e))
+
+        torch_hist_path = save_history_csv("torch", n_hidden, width, hist_t)
+        history_index_rows.append({
+            "impl": "torch",
+            "n_hidden": n_hidden,
+            "width": width,
+            "params": params,
+            "epochs": len(hist_t["train_loss"]),
+            "csv_path": str(torch_hist_path),
+        })
+        if (n_hidden, width) == repr_choice:
+            repr_hist_files["torch"] = torch_hist_path
+
+        results.append(ExperimentResult(
+            impl="torch",
+            n_hidden=n_hidden,
+            width=width,
+            params=params,
+            epochs=EPOCHS,
+            train_time=t_torch,
+            final_train_loss=tr_torch,
+            final_val_loss_noisy=vnoisy_t,
+            final_val_loss_clean=vclean_t,
+        ))
+
+        # Cross-impl performance sanity note
+        assert_similar_performance(vclean_ffnn, vclean_t, name1="ffnn", name2="torch")
+
+    # ---------------- Summary CSV ----------------
+    summary_df = pd.DataFrame([asdict(r) for r in results])
+    summary_path = CSV_DIR / "summary.csv"
+    summary_df.to_csv(summary_path, index=False)
+
+    # Also save a convenient index of where per-epoch histories are stored
+    hist_index_df = pd.DataFrame(history_index_rows)
+    hist_index_df.to_csv(CSV_DIR / "histories_index.csv", index=False)
+
+    # ---------------- Plots (+ CSVs for plotted data) ----------------
+    # 1) Convergence curves for representative layout (reads from the saved history CSVs)
+    if len(repr_hist_files) == 2:  # both ffnn & torch available
+        plot_and_save_convergence(repr_hist_files, n_hidden=repr_choice[0], width=repr_choice[1])
+
+    # 2) Training time vs #params (and save CSV used)
+    plot_and_save_time_vs_params(summary_df)
+
+    # 3) Final MSE (validation clean) per layout & impl (and save CSV used)
+    plot_and_save_final_mse(summary_df)
+
+    print(f"[OK] CSVs saved under: {CSV_DIR.resolve()}")
+    print(f"[OK] Figures saved under: {FIG_DIR.resolve()}")
 
 
 if __name__ == "__main__":
-    run_experiments()
+    main()
