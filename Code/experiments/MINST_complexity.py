@@ -16,7 +16,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostCrossEntropy
 from src.activation_functions import LRELU, RELU, softmax
-
+from config import MODELS_DIR, MNIST_COMPLEXITY_OUTPUT_DIR
 # -------------------- ACT FUNCS MAP --------------------
 act_func_map = {
     'LRELU': LRELU,
@@ -50,8 +50,8 @@ def extract_val_metrics(history: dict, net: FFNN, X_val, y_val, mode="avg_last_n
     return val_loss, val_acc
 
 # -------------------- PATHS --------------------
-BASE_DIR = "Models_MNIST"
-OUTPUT_DIR = "output/MNIST_ComplexityAnalysis"
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = MNIST_COMPLEXITY_OUTPUT_DIR
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -117,8 +117,7 @@ with open(os.path.join(BASE_DIR, run_dir, "config.json"), 'w') as f:
 # -------------------- LOOP ACTIVATIONS --------------------
 for act in activation_funcs:
     heat_loss = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan)
-    heat_acc  = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan)
-
+    heat_acc = np.full((len(n_hidden_list), len(n_perceptrons_list)), np.nan)
     for i_h, n_hidden in enumerate(n_hidden_list):
         for j_w, width in enumerate(n_perceptrons_list):
             layout = build_layout_mnist(n_hidden, width)
@@ -157,8 +156,7 @@ for act in activation_funcs:
             val_loss, val_acc = extract_val_metrics(history, net, X_val, y_val,
                                                     mode=VAL_LOSS_MODE, last_n=LAST_N)
             heat_loss[i_h,j_w] = val_loss
-            heat_acc[i_h,j_w]  = val_acc
-
+            heat_acc[i_h,j_w] = val_acc
     # Salvataggio CSV
     df_loss = pd.DataFrame(heat_loss, index=n_hidden_list, columns=n_perceptrons_list)
     df_loss.index.name = 'hidden_layers'
