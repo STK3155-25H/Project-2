@@ -19,7 +19,8 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import RELU, identity
-from complexity_analysis_TORCH import train_one_model
+from Code.src.torch_utils import train_one_model
+
 
 
 # ======================================================================
@@ -36,12 +37,18 @@ TEST_SIZE = 0.25 # 75% train, 25% validation
 SEED = 314 # for reproducibility
 # Layouts to sweep (n_hidden, width). Edit as desired.
 LAYOUTS: List[Tuple[int, int]] = [
-    (0, 1), # linear baseline
-    (1, 10),
-    (2, 20),
-    (3, 20),
-    (2, 50),
-    (3, 50),
+        (1, 8),
+        (1, 16),
+        (1, 32),
+        (2, 16),
+        (2, 32),
+        (2, 64),
+        (3, 32),
+        (3, 64),
+        (3, 128),
+        (4, 64),
+        (4, 128),
+        (5, 128)
 ]
 # ======================================================================
 # I/O setup
