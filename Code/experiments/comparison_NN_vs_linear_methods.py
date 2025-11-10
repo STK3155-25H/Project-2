@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
-from config import MODELS_DIR, OLS_VS_FFNN_OUTPUT_DIR
+from ..config import MODELS_DIR, OLS_VS_FFNN_OUTPUT_DIR
 # ======= Your utils (as in your file) =======
 from src.OLS_utils import (
     runge_function, split_scale, polynomial_features_scaled,

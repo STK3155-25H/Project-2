@@ -1,5 +1,5 @@
 import os
-from config import OUTPUT_DIR, MODELS_DIR
+from ..config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
 OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
 
@@ -14,7 +14,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import sigmoid, identity, LRELU, RELU, tanh, softmax
-from config import MODELS_DIR, L1_L2_ANALYSIS_OUTPUT_DIR
+from ..config import MODELS_DIR, L1_L2_ANALYSIS_OUTPUT_DIR
 # Activation functions mapping
 act_func_map = {
     'sigmoid': sigmoid,

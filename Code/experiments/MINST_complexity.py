@@ -1,6 +1,6 @@
 from __future__ import annotations
 import os
-from config import OUTPUT_DIR, MODELS_DIR
+from ..config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
 OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
 
@@ -16,7 +16,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostCrossEntropy
 from src.activation_functions import LRELU, RELU, softmax
-from config import MODELS_DIR, MNIST_COMPLEXITY_OUTPUT_DIR
+from ..config import MODELS_DIR, MNIST_COMPLEXITY_OUTPUT_DIR
 # -------------------- ACT FUNCS MAP --------------------
 act_func_map = {
     'LRELU': LRELU,

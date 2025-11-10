@@ -1,4 +1,4 @@
-from config import MODELS_DIR, get_output_subdir
+from ..config import MODELS_DIR, get_output_subdir
 BASE_DIR = MODELS_DIR
 OUTPUT_DIR = get_output_subdir("complexity_analysis")
 

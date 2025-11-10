@@ -1,7 +1,7 @@
 import os
-from config import OUTPUT_DIR, MODELS_DIR
+from ..config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
-OUTPUT_DIR = BENCHMARK_OUTPUT_DIR
+BENCHMARK_OUTPUT_DIR = OUTPUT_DIR 
 import time
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple
