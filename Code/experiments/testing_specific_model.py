@@ -1,4 +1,8 @@
 import os
+from config import OUTPUT_DIR, MODELS_DIR
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
+
 import re
 import csv
 import numpy as np

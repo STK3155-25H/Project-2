@@ -1,31 +1,7 @@
-"""
-convergence_and_complexity_comparison.py
-
-Convergence and temporal complexity experiments on the Runge function, comparing:
-- FFNN implemented from scratch (src.FFNN)
-- PyTorch MLP (train_one_model in complexity_analysis_TORCH.py)
-
-Required setup:
-- 200 equally spaced points in [-1, 1] (Runge)
-- 1500 epochs
-- learning rate = 1e-3
-- L1 = L2 = 0.0
-- number of mini-batches = 100
-- Gaussian noise sigma = 0.03 on targets
-- final loss evaluation on both noisy and clean validation data
-
-Outputs (saved under output/benchmark/):
-- CSVs:
-    * csv/summary.csv (per-impl-per-layout summary)
-    * csv/histories_{impl}_h{n_hidden}_w{width}.csv (per-epoch curves)
-    * csv/time_vs_params.csv (timing vs parameter-count data)
-    * csv/final_mse_clean.csv (final clean-val MSE per layout/impl)
-    * csv/dataset.csv (X/y splits actually used)
-- Plots:
-    * figs/convergence_curves_repr.png (train + val noisy for a representative layout)
-    * figs/time_vs_params_loglog.png (training time vs #params)
-    * figs/final_mse_clean.png (final clean-val MSE per layout & impl)
-"""
+import os
+from config import OUTPUT_DIR, MODELS_DIR
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
 
 import time
 from dataclasses import dataclass, asdict

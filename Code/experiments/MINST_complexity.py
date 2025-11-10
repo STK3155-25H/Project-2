@@ -1,5 +1,9 @@
 from __future__ import annotations
 import os
+from config import OUTPUT_DIR, MODELS_DIR
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
+
 import json
 from datetime import datetime
 import numpy as np

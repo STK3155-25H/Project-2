@@ -1,8 +1,7 @@
-# gd_sweep_and_plots.py
-# Sweep optimizer + LR (molto ampio) su Runge, con plots e gestione "explosion-safe".
-# - CSV completi (per-epoch + summary + pivots) + PNG (heatmap + curve)
-# - LR log-spaced configurabili via esponenti (e.g., 10**[-8..0])
-# - Se un run esplode/va NaN/Inf: non blocca il resto; marcato in CSV e "×" in heatmap.
+import os
+from config import OUTPUT_DIR, MODELS_DIR
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
 
 from __future__ import annotations
 import argparse, itertools, json, math

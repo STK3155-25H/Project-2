@@ -7,6 +7,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
+from config import MODELS_DIR, get_output_subdir
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = get_output_subdir("complexity_analysis")
 
 # ======= Your utils (as in your file) =======
 from src.OLS_utils import (
