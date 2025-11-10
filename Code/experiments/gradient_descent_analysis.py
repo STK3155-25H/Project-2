@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse, itertools, json, math
 from datetime import datetime
 from pathlib import Path
+from config import OPTIMIZER_SWEEP_OUTPUT_DIR
 from typing import Dict, List, Tuple
 
 import autograd.numpy as np
@@ -54,12 +55,12 @@ def default_arch(input_dim: int = 1, output_dim: int = 1) -> Tuple[int, ...]:
 
 def build_scheduler(name: str, eta: float):
     name = name.lower()
-    if name == "constant":          return Constant(eta)
-    if name == "momentum":          return Momentum(eta=eta, momentum=0.9)
-    if name == "adagrad":           return Adagrad(eta=eta)
-    if name == "adagradmomentum":   return AdagradMomentum(eta=eta, momentum=0.9)
-    if name == "rmsprop":           return RMS_prop(eta=eta, rho=0.9)
-    if name == "adam":              return Adam(eta=eta, rho=0.9, rho2=0.999)
+    if name == "constant": return Constant(eta)
+    if name == "momentum": return Momentum(eta=eta, momentum=0.9)
+    if name == "adagrad": return Adagrad(eta=eta)
+    if name == "adagradmomentum": return AdagradMomentum(eta=eta, momentum=0.9)
+    if name == "rmsprop": return RMS_prop(eta=eta, rho=0.9)
+    if name == "adam": return Adam(eta=eta, rho=0.9, rho2=0.999)
     raise ValueError(f"Unknown optimizer: {name}")
 
 # -------------------- SINGLE RUN (safe) --------------------
@@ -120,7 +121,7 @@ def run_one_safe(
             "reason": repr(e),
             "epoch_of_failure": -1,
             "train_errors": np.full(epochs, np.nan),
-            "val_errors":   np.full(epochs, np.nan),
+            "val_errors": np.full(epochs, np.nan),
         }
 
 # -------------------- SWEEP + LOG --------------------
@@ -180,7 +181,7 @@ def run_sweep(
             rows.append({
                 "method": method, "eta": eta, "batch_mode": mode, "seed": seed, "epoch": e+1,
                 "train_loss": float(tr[e]) if np.isfinite(tr[e]) else np.nan,
-                "val_loss":   float(va[e]) if np.isfinite(va[e]) else np.nan,
+                "val_loss": float(va[e]) if np.isfinite(va[e]) else np.nan,
                 "status": res["status"]
             })
 
@@ -204,7 +205,7 @@ def run_sweep(
         summary_records.append({
             "method": key[0], "eta": float(key[1]), "batch_mode": key[2], "seed": int(key[3]),
             "mean_lastN_train": g.tail(n)["train_loss"].mean(skipna=True),
-            "mean_lastN_val":   g.tail(n)["val_loss"].mean(skipna=True),
+            "mean_lastN_val": g.tail(n)["val_loss"].mean(skipna=True),
             "N": n,
             "all_nan": bool(g["val_loss"].tail(n).isna().all())
         })
@@ -226,7 +227,7 @@ def run_sweep(
     cfg = {
         "methods": methods,
         "etas_full": list(map(float, etas_full)),
-        "etas_sgd":  list(map(float, etas_sgd)),
+        "etas_sgd": list(map(float, etas_sgd)),
         "seeds": seeds,
         "epochs": epochs, "batches_sgd": batches_sgd,
         "lam_l1": lam_l1, "lam_l2": lam_l2,
@@ -332,9 +333,7 @@ def make_best_lr_curves(figdir: Path, per_epoch: pd.DataFrame, summary: pd.DataF
         out = figdir / f"curves_best_eta_{mode}.png"
         fig.savefig(out, dpi=dpi)
         plt.close(fig)
-
 # -------------------- CLI --------------------
-
 def parse_args():
     p = argparse.ArgumentParser(description="Optimizer sweep (SGD vs FULL) su Runge + plots + explosion catching.")
     p.add_argument("--epochs", type=int, default=1000)
@@ -348,15 +347,14 @@ def parse_args():
         "constant", "momentum", "adagrad", "adagradmomentum", "rmsprop", "adam"
     ])
     p.add_argument("--seeds", type=int, nargs="*", default=[42, 1337, 31415])
-    p.add_argument("--outdir", type=str, default="output/OptimizerSweep")
-
+    p.add_argument("--outdir", type=str, default=OPTIMIZER_SWEEP_OUTPUT_DIR)
     # ---- LR grids super-ampi, generati via esponenti ----
     p.add_argument("--full-exp-min", type=float, default=-8, help="log10 min per FULL (10**value)")
-    p.add_argument("--full-exp-max", type=float, default=0,  help="log10 max per FULL (10**value)")
-    p.add_argument("--full-n",      type=int,   default=33,  help="# punti FULL")
-    p.add_argument("--sgd-exp-min", type=float, default=-8,  help="log10 min per SGD (10**value)")
-    p.add_argument("--sgd-exp-max", type=float, default=-2,  help="log10 max per SGD (10**value)")
-    p.add_argument("--sgd-n",       type=int,   default=25,  help="# punti SGD")
+    p.add_argument("--full-exp-max", type=float, default=0, help="log10 max per FULL (10**value)")
+    p.add_argument("--full-n", type=int, default=33, help="# punti FULL")
+    p.add_argument("--sgd-exp-min", type=float, default=-8, help="log10 min per SGD (10**value)")
+    p.add_argument("--sgd-exp-max", type=float, default=-2, help="log10 max per SGD (10**value)")
+    p.add_argument("--sgd-n", type=int, default=25, help="# punti SGD")
     return p.parse_args()
 
 def main():
@@ -366,8 +364,7 @@ def main():
     print(f"Writing results to: {outdir}")
 
     etas_full = logspace_from_exponents(args.full_exp_min, args.full_exp_max, args.full_n)
-    etas_sgd  = logspace_from_exponents(args.sgd_exp_min,  args.sgd_exp_max,  args.sgd_n)
-
+    etas_sgd = logspace_from_exponents(args.sgd_exp_min, args.sgd_exp_max, args.sgd_n)
     run_sweep(
         outdir=outdir,
         methods=args.methods,
