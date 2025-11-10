@@ -19,7 +19,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import RELU, identity
-from Code.src.torch_utils import train_one_model
+from src.torch_utils import train_one_model
 
 
 
