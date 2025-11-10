@@ -14,7 +14,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import sigmoid, identity, LRELU, RELU, tanh, softmax
-
+from config import MODELS_DIR, L1_L2_ANALYSIS_OUTPUT_DIR
 # Activation functions mapping
 act_func_map = {
     'sigmoid': sigmoid,
@@ -95,21 +95,19 @@ np.random.seed(SEED)
 
 # Data
 X = np.linspace(-1, 1, 200).reshape(-1, 1)
-noise_global = 0.1  # Noise on all data (for y_noisy)
-noise_train_extra = 0.03  # Extra noise only on y_train (for regularization)
+noise_global = 0.1 # Noise on all data (for y_noisy)
+noise_train_extra = 0.03 # Extra noise only on y_train (for regularization)
 y_noisy = runge(X, noise_std=noise_global).reshape(-1, 1)
-y_clean = runge(X, noise_std=0.0).reshape(-1, 1)  # Clean version for eval
-
+y_clean = runge(X, noise_std=0.0).reshape(-1, 1) # Clean version for eval
 # Training settings
 epochs = 1500
 lr = 0.001
 rho = 0.9
 rho2 = 0.999
 batches = 100
-activation_func = RELU  # Function to use
-VAL_LOSS_MODE = "avg_last_n"  # "min", "final", "avg_last_n"
-LAST_N = 100  # For avg_last_n
-
+activation_func = RELU # Function to use
+VAL_LOSS_MODE = "avg_last_n" # "min", "final", "avg_last_n"
+LAST_N = 100 # For avg_last_n
 # Define models: (name, n_hidden, width)
 models = [
     ("simple", 1, 4),
@@ -122,8 +120,8 @@ lam_l1_list = np.logspace(-6, -1, 10).tolist()
 lam_l2_list = np.logspace(-6, -1, 10).tolist()
 
 # Base folders
-BASE_DIR = "Models_Reg"
-OUTPUT_DIR = "output/l1_l2_analysis"
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = L1_L2_ANALYSIS_OUTPUT_DIR
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -265,7 +263,7 @@ for model_name, n_hidden, width in models:
                     epochs=epochs,
                     lam_l1=lam_l1,
                     lam_l2=lam_l2,
-                    X_val=X_val, t_val=y_val_noisy,  # Use noisy for val during training
+                    X_val=X_val, t_val=y_val_noisy, # Use noisy for val during training
                     save_on_interrupt=None,
                 )
 
