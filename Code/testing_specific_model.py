@@ -1,5 +1,5 @@
 import os
-from ..config import OUTPUT_DIR, MODELS_DIR
+from config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
 OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
 import re
@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from src.FFNN import FFNN
 from src.cost_functions import CostOLS
 from src.activation_functions import identity, LRELU, RELU, sigmoid
-from ..config import SPECIFIC_MODEL_EVAL_OUTPUT_DIR
+from config import SPECIFIC_MODEL_EVAL_OUTPUT_DIR
 # -----------------------------
 # Reproducibility
 # -----------------------------

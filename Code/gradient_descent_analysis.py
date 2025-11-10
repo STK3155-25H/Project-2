@@ -1,13 +1,13 @@
+from __future__ import annotations
 import os
-from ..config import OUTPUT_DIR, MODELS_DIR
+from config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
 OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
 
-from __future__ import annotations
 import argparse, itertools, json, math
 from datetime import datetime
 from pathlib import Path
-from ..config import OPTIMIZER_SWEEP_OUTPUT_DIR
+from config import OPTIMIZER_SWEEP_OUTPUT_DIR
 from typing import Dict, List, Tuple
 
 import autograd.numpy as np

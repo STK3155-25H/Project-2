@@ -10,7 +10,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import sigmoid, identity, LRELU, RELU, tanh, softmax
-from ..config import MODELS_DIR, COMPLEXITY_ANALYSIS_OUTPUT_DIR
+from config import MODELS_DIR, COMPLEXITY_ANALYSIS_OUTPUT_DIR
 # Activation functions mapping
 act_func_map = {
     'sigmoid': sigmoid,

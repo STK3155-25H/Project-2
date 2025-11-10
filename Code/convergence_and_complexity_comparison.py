@@ -1,5 +1,5 @@
 import os
-from ..config import OUTPUT_DIR, MODELS_DIR
+from config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
 BENCHMARK_OUTPUT_DIR = OUTPUT_DIR 
 import time
