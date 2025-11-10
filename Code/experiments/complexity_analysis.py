@@ -10,11 +10,7 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import sigmoid, identity, LRELU, RELU, tanh, softmax
-
-from config import MODELS_DIR, COMPLEXITY_OUTPUT_DIR
-BASE_DIR = MODELS_DIR
-OUTPUT_DIR = COMPLEXITY_OUTPUT_DIR
-
+from config import MODELS_DIR, COMPLEXITY_ANALYSIS_OUTPUT_DIR
 # Activation functions mapping
 act_func_map = {
     'sigmoid': sigmoid,
@@ -37,13 +33,13 @@ def build_layout(n_hidden: int, width: int):
 def extract_losses(history: dict, net: FFNN, X_val, y_val_noisy, y_val_clean, mode="min", last_n=100):
     """Extracts validation loss from history or fallback predict, for noisy and clean."""
     y_pred = net.predict(X_val)
-   
+  
     # Loss on y_val noisy (fallback)
     val_loss_noisy = float(CostOLS(y_val_noisy)(y_pred))
-   
+  
     # Loss on y_val clean (always final predict)
     val_loss_clean = float(CostOLS(y_val_clean)(y_pred))
-   
+  
     # If history has val_loss, use as specified by mode
     val_losses_hist = history.get("val_loss", history.get("val_errors"))
     if val_losses_hist is not None and len(val_losses_hist) > 0:
@@ -99,14 +95,14 @@ lam_l2 = 0.0
 rho = 0.9
 rho2 = 0.999
 batches = 100
-activation_funcs = [LRELU, RELU, tanh, sigmoid] 
+activation_funcs = [LRELU, RELU, tanh, sigmoid]
 n_hidden_list = list(range(1, 6)) # 1-5 hidden layers
 n_perceptrons_list = [2 * i for i in range(1, 21)] # 2,4,...,40
 VAL_LOSS_MODE = "avg_last_n" # "min" for minimum val_loss, "final" for last, "avg_last_n" for average of last n
-LAST_N = 50  # Number of final epochs for the average
+LAST_N = 50 # Number of final epochs for the average
 # Base folders
-BASE_DIR = "Models"
-OUTPUT_DIR = "output/ComplexityAnalysis"
+BASE_DIR = MODELS_DIR
+OUTPUT_DIR = COMPLEXITY_ANALYSIS_OUTPUT_DIR
 os.makedirs(BASE_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Decide if keep going or new run
@@ -180,7 +176,7 @@ for act in activation_funcs:
     csv_noisy = f"val_loss_data_noisy_{act.__name__}.csv"
     csv_path_noisy = os.path.join(OUTPUT_DIR, run_dir, csv_noisy)
     temp_heat_path_noisy = os.path.join(OUTPUT_DIR, run_dir, f"temp_heat_noisy_{act.__name__}.csv")
-   
+  
     # Path for clean
     csv_clean = f"val_loss_data_clean_{act.__name__}.csv"
     csv_path_clean = os.path.join(OUTPUT_DIR, run_dir, csv_clean)
@@ -254,7 +250,7 @@ for act in activation_funcs:
                 df_temp_noisy.index.name = 'hidden_layers'
                 df_temp_noisy.columns.name = 'neurons_per_layer'
                 df_temp_noisy.to_csv(temp_heat_path_noisy)
-               
+              
                 df_temp_clean = pd.DataFrame(heat_clean, index=n_hidden_list, columns=n_perceptrons_list)
                 df_temp_clean.index.name = 'hidden_layers'
                 df_temp_clean.columns.name = 'neurons_per_layer'

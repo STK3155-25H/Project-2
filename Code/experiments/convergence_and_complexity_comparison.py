@@ -1,8 +1,7 @@
 import os
 from config import OUTPUT_DIR, MODELS_DIR
 BASE_DIR = MODELS_DIR
-OUTPUT_DIR = os.path.join(OUTPUT_DIR, "complexity_analysis")
-
+OUTPUT_DIR = BENCHMARK_OUTPUT_DIR
 import time
 from dataclasses import dataclass, asdict
 from typing import Dict, List, Tuple
@@ -20,40 +19,34 @@ from src.FFNN import FFNN
 from src.scheduler import Adam
 from src.cost_functions import CostOLS
 from src.activation_functions import RELU, identity
-
 from complexity_analysis_TORCH import train_one_model
 
 
 # ======================================================================
-#  Experiment constants (required parameters)
+# Experiment constants (required parameters)
 # ======================================================================
-
-N_POINTS = 200           # linspace of 200 points in [-1, 1]
-EPOCHS = 1500            # number of training epochs
-LR = 1e-3                # learning rate
-LAM_L1 = 0.0             # L1 regularization
-LAM_L2 = 0.0             # L2 regularization
-BATCHES = 100            # number of mini-batches
-NOISE_STD = 0.03         # Gaussian noise on targets
-TEST_SIZE = 0.25         # 75% train, 25% validation
-SEED = 314               # for reproducibility
-
+N_POINTS = 200 # linspace of 200 points in [-1, 1]
+EPOCHS = 1500 # number of training epochs
+LR = 1e-3 # learning rate
+LAM_L1 = 0.0 # L1 regularization
+LAM_L2 = 0.0 # L2 regularization
+BATCHES = 100 # number of mini-batches
+NOISE_STD = 0.03 # Gaussian noise on targets
+TEST_SIZE = 0.25 # 75% train, 25% validation
+SEED = 314 # for reproducibility
 # Layouts to sweep (n_hidden, width). Edit as desired.
 LAYOUTS: List[Tuple[int, int]] = [
-    (0, 1),     # linear baseline
+    (0, 1), # linear baseline
     (1, 10),
     (2, 20),
     (3, 20),
     (2, 50),
     (3, 50),
 ]
-
-
 # ======================================================================
-#  I/O setup
+# I/O setup
 # ======================================================================
-
-OUT_ROOT = Path("output/benchmark")
+OUT_ROOT = Path(BENCHMARK_OUTPUT_DIR)
 CSV_DIR = OUT_ROOT / "csv"
 FIG_DIR = OUT_ROOT / "figs"
 for p in (CSV_DIR, FIG_DIR):
@@ -61,7 +54,7 @@ for p in (CSV_DIR, FIG_DIR):
 
 
 # ======================================================================
-#  Utils: dataset, layout, parameters
+# Utils: dataset, layout, parameters
 # ======================================================================
 
 def runge(x: np.ndarray, noise_std: float = 0.0, rng=None) -> np.ndarray:
@@ -88,7 +81,7 @@ def count_params_from_layout(layout: List[int]) -> int:
 
 @dataclass
 class ExperimentResult:
-    impl: str                # "ffnn" or "torch"
+    impl: str # "ffnn" or "torch"
     n_hidden: int
     width: int
     params: int
@@ -100,7 +93,7 @@ class ExperimentResult:
 
 
 # ======================================================================
-#  Convergence checks
+# Convergence checks
 # ======================================================================
 
 def assert_convergence(losses: np.ndarray, name: str, min_drop: float = 0.2) -> None:
@@ -150,7 +143,7 @@ def assert_similar_performance(val1: float, val2: float,
 
 
 # ======================================================================
-#  Training helpers
+# Training helpers
 # ======================================================================
 
 def train_ffnn_single_layout(
@@ -263,7 +256,7 @@ def train_torch_single_layout(
     t0 = time.perf_counter()
     model, history_raw, final_noisy, final_clean = train_one_model(
         layout=layout,
-        act_name="RELU",   # same activation as FFNN
+        act_name="RELU",
         device=device,
         X_train_t=X_train_t,
         y_train_noisy_t=y_train_noisy_t,
@@ -295,7 +288,7 @@ def train_torch_single_layout(
 
 
 # ======================================================================
-#  Runge dataset
+# Runge dataset
 # ======================================================================
 
 def generate_runge_dataset(
@@ -324,7 +317,7 @@ def generate_runge_dataset(
 
 
 # ======================================================================
-#  Orchestration
+# Orchestration
 # ======================================================================
 
 def save_history_csv(impl: str, n_hidden: int, width: int, history: Dict[str, np.ndarray]) -> Path:
@@ -432,8 +425,7 @@ def main():
     save_dataset_csv(X_train, y_train_noisy, X_val, y_val_noisy, y_val_clean)
 
     results: List[ExperimentResult] = []
-    history_index_rows = []  # to track where each history is saved
-
+    history_index_rows = [] # to track where each history is saved
     # Optional: pick a representative layout for the convergence-curve figure.
     # If the desired (2, 50) is absent, we fall back to the first layout.
     repr_choice = (2, 50) if (2, 50) in LAYOUTS else LAYOUTS[0]
@@ -530,7 +522,7 @@ def main():
 
     # ---------------- Plots (+ CSVs for plotted data) ----------------
     # 1) Convergence curves for representative layout (reads from the saved history CSVs)
-    if len(repr_hist_files) == 2:  # both ffnn & torch available
+    if len(repr_hist_files) == 2: # both ffnn & torch available
         plot_and_save_convergence(repr_hist_files, n_hidden=repr_choice[0], width=repr_choice[1])
 
     # 2) Training time vs #params (and save CSV used)
