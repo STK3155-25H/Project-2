@@ -98,7 +98,7 @@ def evaluate_one_model(
     hidden_activation_name: str,
     save_plot: bool,
     layout_out_dir: str,
-    save_curve_csv: bool = True,  # <--- NEW
+    save_curve_csv: bool = True,
 ):
     """
     Load one model, predict on [-1,1], compute MSE vs true Runge,
@@ -154,7 +154,7 @@ def evaluate_one_model(
 
     # === CSV SAVE (per-activation curve) ===
     if save_curve_csv:
-        # Align noisy reference to the same grid (both are linspace with same length = 200)
+        # Align noisy reference to the same grid
         x = X_eval.ravel()
         y_t = y_true.ravel()
         y_p = y_pred.ravel()
@@ -182,7 +182,7 @@ def evaluate_all_activations_for_layout(
     save_plot: bool = True,
     base_plot_dir: str = "output/specific_model_eval",
     save_csv: bool = True,
-    save_curve_csv: bool = True,  # <--- NEW
+    save_curve_csv: bool = True,
 ) -> dict:
     """
     Evaluate a set of activations for a given run folder and layout.
@@ -226,7 +226,7 @@ def evaluate_all_activations_for_layout(
                 hidden_activation_name=act,
                 save_plot=save_plot,
                 layout_out_dir=layout_out_dir,
-                save_curve_csv=save_curve_csv,  # <--- NEW
+                save_curve_csv=save_curve_csv,
             )
             results[act] = {
                 "mse": mse,
@@ -238,10 +238,8 @@ def evaluate_all_activations_for_layout(
         except FileNotFoundError:
             print(f"[Skip] {act:<8} (file not found)")
         except ValueError as e:
-            # Unknown activation mapping -> skip
             print(f"[Skip] {act:<8} ({e})")
         except Exception as e:
-            # Any other error (shape mismatch, etc.) -> skip
             print(f"[Skip] {act:<8} (error: {type(e).__name__}: {e})")
 
     # Write CSV summary (meta)
@@ -267,7 +265,8 @@ def evaluate_all_activations_for_layout(
         plt.plot(X_overlay, y_true, label="True Runge", linewidth=2)
 
         # Plot each activation's prediction; sort legend by MSE
-        for act, info in sorted(results.items(), key=lambda kv: kv[1]["mse"]):
+        results_sorted = sorted(results.items(), key=lambda kv: kv[1]["mse"])
+        for act, info in results_sorted:
             y_pred = info["y_pred"]
             mse = info["mse"]
             plt.plot(
@@ -307,7 +306,7 @@ def evaluate_all_activations_for_layout(
                 x = X_overlay.ravel()
                 y_t = y_true.ravel()
                 y_ref = Y_REF_NOISY.ravel()
-                for act, info in sorted(results.items(), key=lambda kv: kv[1]["mse"]):
+                for act, info in results_sorted:
                     y_p = info["y_pred"].ravel()
                     mse = info["mse"]
                     mpath = info["model_path"]
@@ -317,6 +316,28 @@ def evaluate_all_activations_for_layout(
                             act, f"{mse:.10f}", mpath
                         ])
             print(f"[Saved] overlay data CSV -> {overlay_csv}")
+
+            # === CSV SAVE (overlay, wide format) ===
+            # One row per x; columns: x, y_true, y_ref_noisy, y_pred_<ACT...> (ordered by MSE)
+            overlay_wide_csv = os.path.join(layout_out_dir, "overlay_wide.csv")
+            x = X_overlay.ravel()
+            y_t = y_true.ravel()
+            y_ref = Y_REF_NOISY.ravel()
+
+            # Collect y_pred columns in MSE order
+            act_names = [act for act, _ in results_sorted]
+            ypred_cols = [info["y_pred"].ravel() for _, info in results_sorted]
+
+            header = ["x", "y_true", "y_ref_noisy"] + [f"y_pred_{act}" for act in act_names]
+            with open(overlay_wide_csv, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(header)
+                for i in range(len(x)):
+                    row = [f"{x[i]:.10f}", f"{y_t[i]:.10f}", f"{y_ref[i]:.10f}"]
+                    row += [f"{yp[i]:.10f}" for yp in ypred_cols]
+                    writer.writerow(row)
+            print(f"[Saved] overlay wide CSV -> {overlay_wide_csv}")
+
     else:
         print("[Info] No models were evaluated (overlay not created).")
 
@@ -343,5 +364,5 @@ if __name__ == "__main__":
         save_plot=True,
         base_plot_dir="output/specific_model_eval",
         save_csv=True,
-        save_curve_csv=True,  # <--- NEW
+        save_curve_csv=True,
     )
