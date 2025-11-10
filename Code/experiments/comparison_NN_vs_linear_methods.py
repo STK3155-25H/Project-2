@@ -7,10 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from tqdm import tqdm
-from config import MODELS_DIR, get_output_subdir
-BASE_DIR = MODELS_DIR
-OUTPUT_DIR = get_output_subdir("complexity_analysis")
-
+from config import MODELS_DIR, OLS_VS_FFNN_OUTPUT_DIR
 # ======= Your utils (as in your file) =======
 from src.OLS_utils import (
     runge_function, split_scale, polynomial_features_scaled,
@@ -45,19 +42,17 @@ rho2 = 0.999
 dimensions = (1, 30, 30, 1)
 
 # Ridge / Lasso hyperparam search (log-spaced, reasonably wide)
-RIDGE_LAMS = np.logspace(-6, 2, 9)      # 1e-6 ... 1e+2
-LASSO_LAMS = np.logspace(-6, -1, 6)     # 1e-6 ... 1e-1 (subgradient is happier with smaller l1)
-
+RIDGE_LAMS = np.logspace(-6, 2, 9) # 1e-6 ... 1e+2
+LASSO_LAMS = np.logspace(-6, -1, 6) # 1e-6 ... 1e-1 (subgradient is happier with smaller l1)
 # Optimizer settings for Lasso subgradient
 LASSO_OPT = dict(method='adam', lr=0.01, n_iter=4000, beta=0.9, epsilon=1e-8, use_sgd=False)
 
 # Inner validation split from the training set (for Ridge/Lasso model selection)
-VAL_FRAC = 0.2  # 20% of train goes to val for picking lam
-
+VAL_FRAC = 0.2 # 20% of train goes to val for picking lam
 # -----------------------------
 # Output dirs
 # -----------------------------
-OUT = Path("output/OLS_vs_FFNN")
+OUT = Path(OLS_VS_FFNN_OUTPUT_DIR)
 FIG = OUT / "figures"
 TAB = OUT / "tables"
 FIG.mkdir(parents=True, exist_ok=True)
@@ -113,10 +108,10 @@ def collect_all_metrics(y_tr, y_tr_pred, y_te, y_te_pred, p_linear=None):
     )
     if p_linear is not None:
         d["train_adjR2"] = adjusted_R2(y_tr, y_tr_pred, p_linear)
-        d["test_adjR2"]  = adjusted_R2(y_te, y_te_pred, p_linear)
+        d["test_adjR2"] = adjusted_R2(y_te, y_te_pred, p_linear)
     else:
         d["train_adjR2"] = np.nan
-        d["test_adjR2"]  = np.nan
+        d["test_adjR2"] = np.nan
     return d
 
 # -----------------------------
@@ -127,15 +122,15 @@ MODELS = ["OLS", "Ridge", "Lasso", "FFNN"]
 per_run = {
     m: {
         "mse_train": np.zeros(N_RUNS),
-        "mse_test":  np.zeros(N_RUNS),
-        "r2_train":  np.zeros(N_RUNS),
-        "r2_test":   np.zeros(N_RUNS),
+        "mse_test": np.zeros(N_RUNS),
+        "r2_train": np.zeros(N_RUNS),
+        "r2_test": np.zeros(N_RUNS),
         "mae_train": np.zeros(N_RUNS),
-        "mae_test":  np.zeros(N_RUNS),
+        "mae_test": np.zeros(N_RUNS),
         "rmse_train":np.zeros(N_RUNS),
         "rmse_test": np.zeros(N_RUNS),
         "evs_train": np.zeros(N_RUNS),
-        "evs_test":  np.zeros(N_RUNS),
+        "evs_test": np.zeros(N_RUNS),
         "adjr2_train":np.full(N_RUNS, np.nan),
         "adjr2_test": np.full(N_RUNS, np.nan),
     } for m in MODELS
@@ -147,8 +142,7 @@ lasso_best_lams = np.zeros(N_RUNS)
 
 # Learning curves (FFNN)
 train_losses = np.full((epochs, N_RUNS), np.nan)
-val_losses   = np.full((epochs, N_RUNS), np.nan)
-
+val_losses = np.full((epochs, N_RUNS), np.nan)
 # For plotting fits from last run
 x_plot = y_plot = None
 y_ols_plot = y_nn_plot = None
@@ -183,20 +177,19 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
 
     theta_ols = OLS_parameters(X_train, y_train)
     y_tr_pred_ols = (X_train @ theta_ols).ravel()
-    y_te_pred_ols = (X_test  @ theta_ols).ravel()
-
-    p_lin = X_train.shape[1]  # for adjR2 in linear models
+    y_te_pred_ols = (X_test @ theta_ols).ravel()
+    p_lin = X_train.shape[1] # for adjR2 in linear models
     met = collect_all_metrics(y_train, y_tr_pred_ols, y_test, y_te_pred_ols, p_linear=p_lin)
-    per_run["OLS"]["mse_train"][r]  = met["train_MSE"]
-    per_run["OLS"]["mse_test"][r]   = met["test_MSE"]
-    per_run["OLS"]["r2_train"][r]   = met["train_R2"]
-    per_run["OLS"]["r2_test"][r]    = met["test_R2"]
-    per_run["OLS"]["mae_train"][r]  = met["train_MAE"]
-    per_run["OLS"]["mae_test"][r]   = met["test_MAE"]
+    per_run["OLS"]["mse_train"][r] = met["train_MSE"]
+    per_run["OLS"]["mse_test"][r] = met["test_MSE"]
+    per_run["OLS"]["r2_train"][r] = met["train_R2"]
+    per_run["OLS"]["r2_test"][r] = met["test_R2"]
+    per_run["OLS"]["mae_train"][r] = met["train_MAE"]
+    per_run["OLS"]["mae_test"][r] = met["test_MAE"]
     per_run["OLS"]["rmse_train"][r] = met["train_RMSE"]
-    per_run["OLS"]["rmse_test"][r]  = met["test_RMSE"]
-    per_run["OLS"]["evs_train"][r]  = met["train_EVS"]
-    per_run["OLS"]["evs_test"][r]   = met["test_EVS"]
+    per_run["OLS"]["rmse_test"][r] = met["test_RMSE"]
+    per_run["OLS"]["evs_train"][r] = met["train_EVS"]
+    per_run["OLS"]["evs_test"][r] = met["test_EVS"]
     per_run["OLS"]["adjr2_train"][r]= met["train_adjR2"]
     per_run["OLS"]["adjr2_test"][r] = met["test_adjR2"]
 
@@ -232,8 +225,7 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
     # Refit ridge on full train with best lambda
     theta_ridge = Ridge_parameters(X_train, y_train, lam=float(best_lam_ridge), intercept=True)
     y_tr_pred_ridge = (X_train @ theta_ridge).ravel()
-    y_te_pred_ridge = (X_test  @ theta_ridge).ravel()
-
+    y_te_pred_ridge = (X_test @ theta_ridge).ravel()
     met = collect_all_metrics(y_train, y_tr_pred_ridge, y_test, y_te_pred_ridge, p_linear=p_lin)
     for k_old, k_new in [
         ("mse_train","train_MSE"),("mse_test","test_MSE"),
@@ -268,8 +260,7 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
         X_train, y_train, Type=2, lam=float(best_lam_lasso), **LASSO_OPT, batch_size=X_train.shape[0], theta_history=False
     )
     y_tr_pred_lasso = (X_train @ theta_lasso).ravel()
-    y_te_pred_lasso = (X_test  @ theta_lasso).ravel()
-
+    y_te_pred_lasso = (X_test @ theta_lasso).ravel()
     met = collect_all_metrics(y_train, y_tr_pred_lasso, y_test, y_te_pred_lasso, p_linear=p_lin)
     for k_old, k_new in [
         ("mse_train","train_MSE"),("mse_test","test_MSE"),
@@ -304,36 +295,33 @@ for r in tqdm(range(N_RUNS), desc="Runs", unit="run"):
     )
 
     tr = np.asarray(scores.get("train_errors", []), dtype=float).reshape(-1)
-    vl = np.asarray(scores.get("val_errors",   []), dtype=float).reshape(-1)
+    vl = np.asarray(scores.get("val_errors", []), dtype=float).reshape(-1)
     L = min(len(tr), epochs)
     train_losses[:L, r] = tr[:L]
-    val_losses[:L, r]   = vl[:L]
-
+    val_losses[:L, r] = vl[:L]
     y_tr_pred_nn = nn.predict(x_train.reshape(-1, 1)).reshape(-1)
     y_te_pred_nn = nn.predict(x_test.reshape(-1, 1)).reshape(-1)
-
     met = collect_all_metrics(y_train, y_tr_pred_nn, y_test, y_te_pred_nn, p_linear=None)
-    per_run["FFNN"]["mse_train"][r]  = met["train_MSE"]
-    per_run["FFNN"]["mse_test"][r]   = met["test_MSE"]
-    per_run["FFNN"]["r2_train"][r]   = met["train_R2"]
-    per_run["FFNN"]["r2_test"][r]    = met["test_R2"]
-    per_run["FFNN"]["mae_train"][r]  = met["train_MAE"]
-    per_run["FFNN"]["mae_test"][r]   = met["test_MAE"]
+    per_run["FFNN"]["mse_train"][r] = met["train_MSE"]
+    per_run["FFNN"]["mse_test"][r] = met["test_MSE"]
+    per_run["FFNN"]["r2_train"][r] = met["train_R2"]
+    per_run["FFNN"]["r2_test"][r] = met["test_R2"]
+    per_run["FFNN"]["mae_train"][r] = met["train_MAE"]
+    per_run["FFNN"]["mae_test"][r] = met["test_MAE"]
     per_run["FFNN"]["rmse_train"][r] = met["train_RMSE"]
-    per_run["FFNN"]["rmse_test"][r]  = met["test_RMSE"]
-    per_run["FFNN"]["evs_train"][r]  = met["train_EVS"]
-    per_run["FFNN"]["evs_test"][r]   = met["test_EVS"]
+    per_run["FFNN"]["rmse_test"][r] = met["test_RMSE"]
+    per_run["FFNN"]["evs_train"][r] = met["train_EVS"]
+    per_run["FFNN"]["evs_test"][r] = met["test_EVS"]
     # adjR2 stays NaN for NN
 
     # Save for last-run fits
     if r == N_RUNS - 1:
-        x_plot       = x_test.copy()
-        y_plot       = y_test.copy()
-        y_ols_plot   = y_te_pred_ols.copy()
+        x_plot = x_test.copy()
+        y_plot = y_test.copy()
+        y_ols_plot = y_te_pred_ols.copy()
         y_ridge_plot = y_te_pred_ridge.copy()
         y_lasso_plot = y_te_pred_lasso.copy()
-        y_nn_plot    = y_te_pred_nn.copy()
-
+        y_nn_plot = y_te_pred_nn.copy()
 # -----------------------------
 # Aggregation
 # -----------------------------
@@ -368,29 +356,28 @@ def summarize_model(stats_dict):
     for k, v in stats_dict.items():
         mu, sd = mean_std(v)
         rows[k + "_mean"] = mu
-        rows[k + "_std"]  = sd
+        rows[k + "_std"] = sd
     return rows
 
 summary_rows = []
 for m in MODELS:
-    stats = {  # train/test metrics we recorded
+    stats = { # train/test metrics we recorded
         "train_mse": per_run[m]["mse_train"],
-        "test_mse":  per_run[m]["mse_test"],
-        "train_r2":  per_run[m]["r2_train"],
-        "test_r2":   per_run[m]["r2_test"],
+        "test_mse": per_run[m]["mse_test"],
+        "train_r2": per_run[m]["r2_train"],
+        "test_r2": per_run[m]["r2_test"],
         "train_mae": per_run[m]["mae_train"],
-        "test_mae":  per_run[m]["mae_test"],
+        "test_mae": per_run[m]["mae_test"],
         "train_rmse":per_run[m]["rmse_train"],
         "test_rmse": per_run[m]["rmse_test"],
         "train_evs": per_run[m]["evs_train"],
-        "test_evs":  per_run[m]["evs_test"],
+        "test_evs": per_run[m]["evs_test"],
         "train_adjR2": per_run[m]["adjr2_train"],
-        "test_adjR2":  per_run[m]["adjr2_test"],
+        "test_adjR2": per_run[m]["adjr2_test"],
     }
     row = {"model": m}
     row.update(summarize_model(stats))
     summary_rows.append(row)
-
 summary_df = pd.DataFrame(summary_rows)
 summary_df.to_csv(TAB / "part_b_summary.csv", index=False)
 
@@ -400,13 +387,11 @@ pd.DataFrame({
     "ridge_best_lambda": ridge_best_lams,
     "lasso_best_lambda": lasso_best_lams,
 }).to_csv(TAB / "part_b_best_lams_per_run.csv", index=False)
-
 # Learning curves averages (+ std)
 avg_train_loss = np.nanmean(train_losses, axis=1)
-avg_val_loss   = np.nanmean(val_losses,   axis=1)
-std_train_loss = np.nanstd(train_losses,  axis=1, ddof=1)
-std_val_loss   = np.nanstd(val_losses,    axis=1, ddof=1)
-
+avg_val_loss = np.nanmean(val_losses, axis=1)
+std_train_loss = np.nanstd(train_losses, axis=1, ddof=1)
+std_val_loss = np.nanstd(val_losses, axis=1, ddof=1)
 # Export learning curves used in the plot
 pd.DataFrame({
     "epoch": np.arange(len(avg_train_loss)),
@@ -415,7 +400,6 @@ pd.DataFrame({
     "avg_val_mse": avg_val_loss,
     "std_val_mse": std_val_loss,
 }).to_csv(TAB / "ffnn_learning_curves_avg.csv", index=False)
-
 # Also export per-run test MSEs (used by boxplot & bars)
 rows = []
 for i, m in enumerate(MODELS):
@@ -429,7 +413,7 @@ for i, m in enumerate(MODELS):
 print("\n=== Aggregated metrics (mean ± std) ===")
 for m in MODELS:
     mtr, mte = mean_std(per_run[m]["mse_train"]), mean_std(per_run[m]["mse_test"])
-    rtr, rte = mean_std(per_run[m]["r2_train"]),  mean_std(per_run[m]["r2_test"])
+    rtr, rte = mean_std(per_run[m]["r2_train"]), mean_std(per_run[m]["r2_test"])
     print(f"{m:6s} | Train MSE {mtr[0]:.4f} ± {mtr[1]:.4f} | Test MSE {mte[0]:.4f} ± {mte[1]:.4f} | "
           f"Train R2 {rtr[0]:.4f} ± {rtr[1]:.4f} | Test R2 {rte[0]:.4f} ± {rte[1]:.4f}")
 
@@ -440,10 +424,10 @@ for m in MODELS:
 fig, ax = plt.subplots(figsize=(8, 6))
 epoch_range = np.arange(len(avg_train_loss))
 ax.plot(epoch_range, avg_train_loss, label='Average Train MSE', linewidth=2.0, color='red')
-ax.plot(epoch_range, avg_val_loss,   label='Average Val MSE',   linewidth=2.0, color='blue')
+ax.plot(epoch_range, avg_val_loss, label='Average Val MSE', linewidth=2.0, color='blue')
 ax.fill_between(epoch_range, avg_train_loss - std_train_loss, avg_train_loss + std_train_loss,
                 alpha=0.15, label='Train std', color='red')
-ax.fill_between(epoch_range, avg_val_loss - std_val_loss,     avg_val_loss + std_val_loss,
+ax.fill_between(epoch_range, avg_val_loss - std_val_loss, avg_val_loss + std_val_loss,
                 alpha=0.15, label='Val std', color='blue')
 ax.set_xlabel('Epochs')
 ax.set_ylabel('MSE')
@@ -452,24 +436,21 @@ ax.legend()
 plt.tight_layout()
 plt.savefig(FIG / "ffnn_loss_epochs.png", dpi=200)
 plt.close(fig)
-
 # 2) Fits on the last run (test set) + CSV EXPORT with gray datapoints & high-contrast lines
 if x_plot is not None:
-    x1d   = np.asarray(x_plot).reshape(-1)
-    y1d   = np.asarray(y_plot).reshape(-1)
+    x1d = np.asarray(x_plot).reshape(-1)
+    y1d = np.asarray(y_plot).reshape(-1)
     yols1 = np.asarray(y_ols_plot).reshape(-1)
     yrid1 = np.asarray(y_ridge_plot).reshape(-1)
     ylas1 = np.asarray(y_lasso_plot).reshape(-1)
-    ynn1  = np.asarray(y_nn_plot).reshape(-1)
-
+    ynn1 = np.asarray(y_nn_plot).reshape(-1)
     order = np.argsort(x1d)
-    x_sorted      = x1d[order]
-    y_sorted      = y1d[order]
-    y_ols_sorted  = yols1[order]
+    x_sorted = x1d[order]
+    y_sorted = y1d[order]
+    y_ols_sorted = yols1[order]
     y_ridge_sorted= yrid1[order]
     y_lasso_sorted= ylas1[order]
-    y_nn_sorted   = ynn1[order]
-
+    y_nn_sorted = ynn1[order]
     # -------- CSV EXPORT --------
     df_plot = pd.DataFrame({
         "x": x_sorted,
@@ -481,22 +462,19 @@ if x_plot is not None:
     })
     df_plot.to_csv(TAB / "runge_fits_last_run.csv", index=False)
     print(f"Saved CSV of plotted data -> {TAB / 'runge_fits_last_run.csv'}")
-
     # -------- PLOT --------
     fig, ax = plt.subplots(figsize=(8, 6))
-
     # Scatter datapoints in gray
     ax.scatter(x_sorted, y_sorted, label="Test Data (with noise)",
                alpha=0.4, color="gray")
-
     # High-contrast plot colors
-    ax.plot(x_sorted, y_ols_sorted,   label=f"OLS deg {best_degree}",
+    ax.plot(x_sorted, y_ols_sorted, label=f"OLS deg {best_degree}",
             linewidth=2.5, color="red")
     ax.plot(x_sorted, y_ridge_sorted, label="Ridge (best λ)",
             linewidth=2.5, color="blue")
     ax.plot(x_sorted, y_lasso_sorted, label="Lasso (best λ)",
             linewidth=2.5, color="orange")
-    ax.plot(x_sorted, y_nn_sorted,    label="FFNN",
+    ax.plot(x_sorted, y_nn_sorted, label="FFNN",
             linewidth=2.5, color="green")
 
     ax.set_xlabel('x'); ax.set_ylabel('y')
@@ -518,7 +496,7 @@ plt.close(fig)
 
 # 4) Bar chart of mean±std Test MSE (high-contrast bars: mapped colors)
 means = [np.nanmean(per_run[m]["mse_test"]) for m in MODELS]
-stds  = [np.nanstd(per_run[m]["mse_test"], ddof=1) for m in MODELS]
+stds = [np.nanstd(per_run[m]["mse_test"], ddof=1) for m in MODELS]
 colors = ["red", "blue", "orange", "green"]
 fig, ax = plt.subplots(figsize=(8, 6))
 pos = np.arange(len(MODELS))
@@ -532,5 +510,5 @@ plt.close(fig)
 
 print(f"\nPart B done. Aggregated over {N_RUNS} runs.")
 print(f"Figures -> {FIG}")
-print(f"Tables  -> {TAB}")
+print(f"Tables -> {TAB}")
 print("Note: run Part A first and load the actual best (n, degree) from CSV when available.")
