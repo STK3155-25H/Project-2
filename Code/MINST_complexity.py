@@ -81,7 +81,7 @@ LAST_N = 10
 
 # -------------------- LOAD MNIST --------------------
 def load_mnist():
-    print("🔄 Fetching MNIST from OpenML (cached automatically)...")
+    print(" Fetching MNIST from OpenML (cached automatically)...")
     X, y = fetch_openml("mnist_784", version=1, as_frame=False, return_X_y=True)
     X = X.astype(np.float64) / 255.0
     y = y.astype(np.int64)
