@@ -45,18 +45,36 @@ The repository is organized for modularity: core models in separate files, task-
 Here is the complete file tree (recursively listed based on the repository contents):
 
 ```
-Project-2/
-├── optimizers.py                  # Implements optimization algorithms: functions like gd_ols(X, y, eta), sgd_ridge(X, y, eta, lambda_, batch_size), momentum_gd(...), adagrad(...), rmsprop(...), adam(...). Insights: Uses Autograd for gradient computation; adaptive methods maintain running averages (e.g., Adam's m_t and v_t for bias-corrected updates). Handles convergence checks via tolerance or max iterations; momentum adds velocity term for faster escape from plateaus.
-├── neural_network.py              # Defines FFNN class: __init__(layers, activation='sigmoid', output_activation='linear', lambda_=0). Methods: forward(X) for predictions, backpropagate(grad_loss) for weight updates, train(X, y, optimizer='adam', epochs=100, batch_size=32) with mini-batch looping. Insights: Back-propagation computes deltas layer-by-layer (e.g., delta_output = grad_loss * output_deriv); supports classification by switching to softmax/cross-entropy. Regularization added to cost gradient. Efficient for small networks but scales with matrix multiplications.
-├── logistic_regression.py         # Defines LogisticRegression class: fit(X, y, eta, lambda_, epochs, batch_size) using SGD. Predicts via sigmoid(theta @ X.T). Insights: Cross-entropy loss with L2 term; gradient: (1/m) * X.T @ (preds - y) + 2*lambda_*theta. Simple baseline for binary tasks; converges quickly but limited to linear boundaries.
-├── regression_tasks.py            # Scripts for regression experiments: Functions to generate data (e.g., polynomial_data(n, degree, noise)), run_optimizer_tests(optimizers, etas, lambdas), plot_mse_vs_lambda(). Insights: Loops over hyperparameters, computes MSE/R² on test sets; compares custom vs. scikit-learn LinearRegression/Ridge. Highlights Adam's superiority on noisy data like Franke (faster convergence, lower final MSE).
-├── classification_tasks.py        # Scripts for classification: load_cancer_data(), train_ffnn_classifier(layers, activation), train_logreg(etas, lambdas), plot_accuracy_heatmap(). Insights: Uses FFNN with sigmoid output; evaluates on hold-out set. Confusion matrices show FFNN reduces false negatives better than logreg on imbalanced classes.
-├── utils.py                       # Helper functions: franke_function(x, y, noise=0), mse(y_true, y_pred), r2_score(y_true, y_pred), plot_surface(X, Y, Z). Insights: Data gen uses meshgrid for 2D; metrics match scikit-learn; plotting includes heatmaps for predictions vs. true surfaces, revealing overfitting patterns (e.g., high λ smooths outputs).
-├── main.py                        # Main runner: Imports all, runs regression/classification tasks sequentially, saves figures/results. Insights: Configurable via args (e.g., dataset='franke', optimizer='adam'); prints summaries like "Adam MSE: 0.05 after 100 epochs".
-├── Project2.ipynb                 # Jupyter notebook: Interactive version of main.py with cells for data loading, model training, visualizations. Key sections: Part a (optimizers on polys), b (FFNN regression), d (FFNN classification), e (logreg). Insights: Includes markdown explanations; plots inline (e.g., learning curves showing epochs vs. loss); hyperparam grids via loops.
-├── report.pdf                     # Comprehensive PDF report: Sections on theory, methods, results (tables of MSE/accuracy), discussions (e.g., ReLU vs. sigmoid trade-offs), limitations (e.g., no dropout for overfitting). Insights: Features grids of plots (e.g., MSE vs. η/λ heatmaps); concludes FFNN ~95% acc on cancer data vs. logreg ~93%.
-├── figures/                       # Directory for outputs: e.g., franke_prediction_heatmap.png, convergence_adam_vs_gd.png, cancer_confusion_matrix.png. No subdirs; ~20 files generated from runs.
-└── results/                       # Directory for data outputs: e.g., regression_metrics.csv (columns: optimizer, eta, lambda, mse, r2), classification_accuracies.txt. Insights: CSV for easy analysis; stores raw predictions for reproducibility.
+├── Code
+│   ├── MINST_complexity.py
+│   ├── __init__.py
+│   ├── autograd_gradient_check.py
+│   ├── codeexport.config.psd1
+│   ├── comparison_NN_vs_linear_methods.py
+│   ├── complexity_analysis.py
+│   ├── config.py
+│   ├── convergence_and_complexity_comparison.py
+│   ├── gradient_descent_analysis.py
+│   ├── l1_l2_analysis.py
+│   ├── plotting
+│   │   ├── __init__.py
+│   │   ├── plot_clasification_complexity.py
+│   │   ├── plot_gd_alalysis.py
+│   │   ├── plot_gdmethods_heatmaps.py
+│   │   └── render_confusion_matrix.py
+│   ├── src
+│   │   ├── FFNN.py
+│   │   ├── OLS_utils.py
+│   │   ├── __init__.py
+│   │   ├── activation_functions.py
+│   │   ├── cost_functions.py
+│   │   ├── scheduler.py
+│   │   └── torch_utils.py
+│   └── testing_specific_model.py
+├── Makefile
+├── README.md
+├── Report.pdf
+└── requirements.txt
 ```
 
 No additional subdirectories or hidden files (e.g., .git) are present beyond this structure. The setup promotes reusability—e.g., FFNN can be imported independently.
